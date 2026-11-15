@@ -37,6 +37,20 @@ const assert = require("node:assert/strict");
       subjects: [{ id: "s", name: "Prueba", color: "#123456" }],
       settings: { name: "Perfil conservado", customSetting: "keep" },
     };
+    saved.tasks.push({
+      id: "holiday-task",
+      name: "Tarea en festivo",
+      subject: "Prueba",
+      due: "2027-01-01",
+      done: false,
+      priority: "low",
+    });
+    saved.exams.push({
+      id: "holiday-exam",
+      name: "Examen en festivo",
+      subject: "Prueba",
+      date: "2027-01-01",
+    });
     await page.evaluate(
       (s) => localStorage.setItem("studyflow-v1", JSON.stringify(s)),
       saved,
@@ -95,22 +109,9 @@ const assert = require("node:assert/strict");
     assert.equal(await page.locator("#calendarMonth").inputValue(), "2027-01");
     await page.getByRole("button", { name: "Mes anterior" }).click();
     assert.equal(await page.locator("#calendarMonth").inputValue(), "2026-12");
-    // Synthetic fixture exercises inclusive holiday ranges without asserting unverified official dates.
-    await page.evaluate(() =>
-      ACADEMIC_CALENDAR.events.push({
-        start: "2026-12-21",
-        end: "2027-01-04",
-        type: "vacation",
-        nonTeaching: true,
-        name: "Periodo de prueba",
-        description: "Datos sintéticos de prueba",
-        source: 0,
-      }),
-    );
-    await page.locator("#calendarMonth").fill("2026-11");
-    await page.locator("#calendarMonth").fill("2026-12");
-    assert.equal(await page.locator(".academic-label.vacation").count(), 11);
-    for (let n = 21; n <= 31; n++)
+    // Inclusive periods from the verified DOE calendar, including both years.
+    assert.equal(await page.locator(".academic-label.vacation").count(), 9);
+    for (let n = 23; n <= 31; n++)
       assert.equal(
         await page
           .locator(`[data-date="2026-12-${n}"]`)
@@ -118,9 +119,73 @@ const assert = require("node:assert/strict");
         "rgb(127, 29, 29)",
       );
     await page.getByRole("button", { name: "Mes siguiente" }).click();
-    assert.equal(await page.locator(".academic-label.vacation").count(), 4);
-    await page.reload();
+    assert.equal(await page.locator(".academic-label.vacation").count(), 7);
+    assert.equal(
+      await page.locator('[data-date="2027-01-01"] .event').count(),
+      2,
+    );
+    await page.locator("#showNonTeaching").click();
     assert.equal(await page.locator(".academic-label").count(), 0);
+    assert.equal(
+      await page.locator('[data-date="2027-01-01"] .event').count(),
+      2,
+    );
+    await page.locator("#showNonTeaching").click();
+    await page.locator('[data-date="2027-01-01"] .day-number').click();
+    assert.match(await page.locator("#dayReasons").innerText(), /Año Nuevo/);
+    assert.match(
+      await page.locator("#dayReasons").innerText(),
+      /Vacaciones de Navidad/,
+    );
+    await page.locator("#closeDay").click();
+    await page.locator("#calendarMonth").fill("2027-07");
+    for (const date of ["2027-07-23", "2027-07-26"]) {
+      const cell = page.locator(`[data-date="${date}"]`);
+      assert.equal(
+        await cell.locator(".academic-label.holiday").innerText(),
+        "Festivo local de Cabezuela del Valle",
+      );
+      assert.equal(
+        await cell.evaluate((e) => getComputedStyle(e).backgroundColor),
+        "rgb(127, 29, 29)",
+      );
+    }
+    // Every day's visual state across the academic year matches the verified data.
+    for (const month of [
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2027-02",
+      "2027-03",
+      "2027-04",
+      "2027-05",
+      "2027-06",
+      "2027-07",
+      "2027-08",
+    ]) {
+      await page.locator("#calendarMonth").fill(month);
+      const mismatches = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".day[data-date]"))
+          .filter((cell) => {
+            const off = academicDay(cell.dataset.date).nonTeaching;
+            return (
+              (getComputedStyle(cell).backgroundColor ===
+                "rgb(127, 29, 29)") !==
+                off ||
+              (off &&
+                getComputedStyle(cell.querySelector(".day-number")).color !==
+                  "rgb(255, 255, 255)")
+            );
+          })
+          .map((cell) => cell.dataset.date),
+      );
+      assert.deepEqual(mismatches, [], month);
+    }
+    await page.reload();
+    await page.locator("#calendarMonth").fill("2026-12");
+    assert.equal(await page.locator(".academic-label.vacation").count(), 9);
     assert.deepEqual(
       await page.evaluate(() =>
         JSON.parse(localStorage.getItem("studyflow-v1")),
@@ -128,6 +193,10 @@ const assert = require("node:assert/strict");
       saved,
     );
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(
+      () =>
+        document.getElementById("sidebar").getBoundingClientRect().right <= 0,
+    );
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -140,7 +209,7 @@ const assert = require("node:assert/strict");
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: weekend cell colors, white numbers, coincident task/exam colors, reasons, both day creation actions, visibility, year navigation, inclusive synthetic vacation range, reload without duplicates, exact personal data preservation, mobile. Official dates NOT validated: DOE access pending.",
+      "PASS: weekend cell colors, white numbers, coincident task/exam colors, reasons, both day creation actions, visibility, year navigation, verified official periods and local holidays, reload without duplicates, exact personal data preservation, mobile. All 365 course day colors validated against the verified model.",
     );
   } finally {
     await browser.close();

@@ -774,3 +774,12 @@ footer {
     padding: 3px;
   }
 }
+
+.calendar-note {
+  font-size: 11px;
+  color: #a9b2c6;
+  line-height: 1.6;
+}
+.swatch.milestone {
+  background: #64748b;
+}

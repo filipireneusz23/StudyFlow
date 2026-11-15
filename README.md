@@ -35,15 +35,16 @@ La prueba usa datos aislados en un navegador temporal: migración desde 1.0, cop
 
 Revisa `git diff`, ejecuta las comprobaciones y crea un commit con los archivos de la aplicación, documentación y pruebas. No incluyas datos personales exportados. Después sube la rama a GitHub y configura GitHub Pages si corresponde. Esta actualización no necesita servidor backend.
 
-## Calendario académico 2026/2027 (en preparación)
+## Calendario académico 2026/2027
 
-La rama `academic-calendar-2026-2027` prepara la visualización de días sin clase, los motivos, las acciones para crear tareas/exámenes desde cualquier fecha, la leyenda y el selector de mes. Los fines de semana se muestran en rojo oscuro; las tareas en azul y los exámenes en rojo intenso. Esta visualización no modifica los datos personales ni introduce festivos en localStorage.
+Calendario oficial de Extremadura adaptado a Cabezuela del Valle (Cáceres), FP Grado Medio de régimen general. Clases ordinarias del **10/09/2026 al 04/06/2027**. Incluye Navidad, Carnaval, Semana Santa, festivos oficiales y los festivos locales del **23 y 26 de julio de 2027**, verificados en el anexo del DOE. No inventa Día del Centro ni sustituciones.
 
-**Pendiente antes de publicar:** consultar las dos resoluciones oficiales del DOE, verificar fechas para FP Grado Medio y Cabezuela del Valle, completar `academic-calendar.js` y validar los datos frente a las fuentes. Actualmente `verified` es `false` y no se han cargado fechas oficiales, incluidos los festivos locales propuestos del 23 y 26 de julio de 2027. No se presupone Día del Centro ni sustituciones. Un día sin marca no garantiza que haya clase mientras la verificación esté pendiente.
+Los cuadrados de los días sin clases ordinarias se muestran en rojo oscuro; se conservan las tareas y exámenes dentro de cada día. Los periodos anterior y posterior a las clases ordinarias se identifican como tales: pueden existir evaluaciones o formación en empresa según el centro. Los eventos académicos no se incorporan al almacenamiento personal. Consulta la [trazabilidad de fechas y fuentes oficiales](docs/calendario-2026-2027.md).
 
-El acceso a `doe.juntaex.es` debe habilitarse en los ajustes de red del entorno. Fuentes:
+Con el servidor local y Playwright disponibles:
 
-- https://doe.juntaex.es/otrosFormatos/html.php?anio=2026&doe=1160o&xml=2026061567
-- https://doe.juntaex.es/otrosFormatos/html.php?anio=2026&doe=2070o&xml=2026062650
-
-La prueba `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/academic-calendar.cjs` comprueba colores de cuadrado completo, motivos, coincidencia con eventos personales, navegación entre años y conservación exacta de datos existentes. El intervalo vacacional utilizado por la prueba es **sintético**: verifica el tratamiento inclusivo de intervalos y no acredita fechas oficiales.
+```sh
+node tests/academic-data.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/academic-calendar.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/smoke.cjs
+```
