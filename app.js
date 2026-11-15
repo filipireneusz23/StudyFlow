@@ -234,6 +234,8 @@ function tasksView() {
       )}</div>${taskRows(orderedTasks().filter((t) => filter === "all" || (filter === "done" ? t.done : !t.done)))}</section><section class="card" style="margin-top:20px"><div class="section-head"><h2>Todos los exámenes</h2></div>${examRows(state.exams.slice().sort((a, b) => a.date.localeCompare(b.date)))}</section>`
   );
 }
+let showNonTeaching = true;
+let selectedDay = today();
 function calendarView() {
   const y = month.getFullYear(),
     m = month.getMonth(),
@@ -249,8 +251,17 @@ function calendarView() {
       continue;
     }
     const date = localDate(new Date(y, m, n));
+    const academic = academicDay(date);
     cells +=
-      `<div class="day ${date === today() ? "today" : ""}" data-date="${date}"><button class="day-number" data-new-date="${date}" aria-label="Añadir tarea el ${date}">${n}</button>` +
+      `<div class="day ${date === today() ? "today" : ""} ${showNonTeaching && academic.nonTeaching ? "non-teaching" : ""}" data-date="${date}"><button class="day-number" data-day="${date}" aria-label="Ver el día ${date}">${n}</button>` +
+      (showNonTeaching
+        ? academic.events
+            .map(
+              (event) =>
+                `<button class="academic-label ${event.type}" data-day="${date}">${esc(event.name)}</button>`,
+            )
+            .join("")
+        : "") +
       state.tasks
         .filter((t) => t.due === date)
         .map(
@@ -273,7 +284,7 @@ function calendarView() {
       "Tus entregas y exámenes, justo donde deben estar.",
       addButtons(),
     ) +
-    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-grid">${cells}</div><p class="legend">☑ Tareas · ◇ Exámenes · Pulsa un día para añadir una tarea o un evento para editarlo.</p></section>`
+    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p>${!ACADEMIC_CALENDAR.verified ? '<p class="calendar-warning" role="note">Fechas oficiales pendientes de verificación. Solo se señalan los fines de semana; un día sin marca no confirma que haya clase.</p>' : ""}<div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Sin clase</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea</span><span><i class="swatch exam"></i>Examen</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
   );
 }
 function subjectsView() {
@@ -382,6 +393,40 @@ function download(raw, name) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+function openDay(date) {
+  selectedDay = date;
+  const info = academicDay(date);
+  $("dayTitle").textContent = formatDate(date);
+  $("dayReasons").innerHTML =
+    (info.weekend ? "<p>Fin de semana: no hay clases ordinarias.</p>" : "") +
+    info.events
+      .map(
+        (event) =>
+          `<section><h3>${esc(event.name)}</h3><p>${esc(event.description)}</p><a class="text-link" href="${esc(ACADEMIC_CALENDAR.sources[event.source])}" target="_blank" rel="noopener noreferrer">Fuente oficial ↗</a></section>`,
+      )
+      .join("") +
+    (!info.nonTeaching
+      ? "<p>No consta una suspensión de clases confirmada para este día.</p>"
+      : "") +
+    (!ACADEMIC_CALENDAR.verified
+      ? '<p class="calendar-warning">Las fechas oficiales del curso están pendientes de verificación.</p>'
+      : "");
+  $("dayDetails").showModal();
+}
+$("closeDay").onclick = () => $("dayDetails").close();
+$("dayTask").onclick = () => {
+  $("dayDetails").close();
+  openEditor("task", null, selectedDay);
+};
+$("dayExam").onclick = () => {
+  $("dayDetails").close();
+  openEditor("exam", null, selectedDay);
+};
+$("main").addEventListener("click", (event) => {
+  if (event.target.closest("button, a, input, select, label")) return;
+  const day = event.target.closest(".day[data-date]");
+  if (day) openDay(day.dataset.date);
+});
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
@@ -406,7 +451,7 @@ document.addEventListener("click", (e) => {
     month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     render();
   }
-  if (d.newDate) openEditor("task", null, d.newDate);
+  if (d.day) openDay(d.day);
   if (d.action === "export")
     download(JSON.stringify(state, null, 2), "studyflow-datos.json");
   if (d.action === "original") {
@@ -464,6 +509,17 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("change", async (e) => {
+  if (e.target.id === "showNonTeaching") {
+    showNonTeaching = e.target.checked;
+    render();
+  }
+  if (e.target.id === "calendarMonth" && /^\d{4}-\d{2}$/.test(e.target.value)) {
+    const [year, monthIndex] = e.target.value.split("-").map(Number);
+    if (year >= 1900 && year <= 2100 && monthIndex >= 1 && monthIndex <= 12) {
+      month = new Date(year, monthIndex - 1, 1);
+      render();
+    }
+  }
   if (e.target.dataset.toggle)
     mutate((s) => {
       const t = s.tasks.find((t) => String(t.id) === e.target.dataset.toggle);

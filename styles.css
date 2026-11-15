@@ -668,3 +668,109 @@ footer {
     transition: none;
   }
 }
+/* Full-cell non-teaching background remains distinct from personal events. */
+.day.non-teaching {
+  background: #7f1d1d;
+}
+.day.non-teaching .day-number {
+  color: #fff;
+}
+.day.non-teaching.today .day-number {
+  background: #501313;
+  outline: 1px solid #fff;
+}
+.event {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #93c5fd;
+}
+.event.exam {
+  background: #dc2626;
+  color: #fff;
+  border-color: #fecaca;
+}
+.academic-label {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  padding: 5px;
+  margin-top: 5px;
+  background: #9a3412;
+  color: #ffedd5;
+}
+.academic-label.vacation {
+  background: #166534;
+  color: #dcfce7;
+}
+.academic-label.milestone {
+  background: #334155;
+  color: #f1f5f9;
+}
+.calendar-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #b4a3ff;
+}
+.visual-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.visual-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  display: inline-block;
+  height: 12px;
+  width: 12px;
+  border-radius: 3px;
+}
+.swatch.no-class {
+  background: #7f1d1d;
+  border: 1px solid #fca5a5;
+}
+.swatch.vacation {
+  background: #166534;
+}
+.swatch.holiday {
+  background: #9a3412;
+}
+.swatch.task {
+  background: #1d4ed8;
+}
+.swatch.exam {
+  background: #dc2626;
+}
+.calendar-warning {
+  color: #fcd69b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+#dayReasons {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) {
+  .academic-label {
+    font-size: 9px;
+    padding: 3px;
+  }
+}

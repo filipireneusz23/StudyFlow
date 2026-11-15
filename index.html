@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#101218" />
     <title>StudyFlow · 3.0</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="academic-calendar.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -75,6 +76,24 @@
           ><button type="submit">Guardar</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="dayDetails" aria-labelledby="dayTitle">
+      <div class="section-head">
+        <h2 id="dayTitle"></h2>
+        <button
+          type="button"
+          id="closeDay"
+          class="secondary"
+          aria-label="Cerrar detalles"
+        >
+          ×
+        </button>
+      </div>
+      <div id="dayReasons"></div>
+      <div class="actions">
+        <button id="dayTask">＋ Nueva tarea</button
+        ><button id="dayExam" class="secondary">＋ Examen</button>
+      </div>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
   </body>
