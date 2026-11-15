@@ -9,6 +9,7 @@ function fixture(options = {}) {
       JSON.stringify({
         clientId: "test.apps.googleusercontent.com",
         mapping: {},
+        accessMode: "full",
       }),
     ],
     ["studyflow-v1", "personal data"],

@@ -1,5 +1,7 @@
 # Conectar Google Classroom a StudyFlow
 
+> **Modos de acceso:** el predeterminado ahora es **Entregas propias · acceso limitado**, con `classroom.student-submissions.me.readonly`. Permite estados y enlaces, pero no títulos, enunciados ni fechas. El modo completo continúa requiriendo `classroom.coursework.me.readonly`. Estos scopes no son equivalentes. Consulta la [comparación oficial y configuración del modo limitado](classroom-permissions.md). Las instrucciones sobre el scope de actividades completas de esta guía solo se aplican si seleccionas ese modo.
+
 La integración usa Google Identity Services (GIS), OAuth 2.0 para JavaScript y la API oficial de Google Classroom. Funciona en GitHub Pages sin servidor y es de **solo lectura**. No solicita tu contraseña en StudyFlow ni utiliza un Client Secret. Hasta configurar tu Client ID muestra **Pendiente de configuración**.
 
 ## 1. Crear el proyecto

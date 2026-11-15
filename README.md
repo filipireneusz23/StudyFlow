@@ -61,3 +61,10 @@ NODE_PATH=/tmp/studyflow-tests/node_modules node tests/classroom-browser.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/oauth-browser.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/scopes-browser.cjs
 ```
+
+La conexión usa por defecto el **modo de entregas propias**, compatible con `classroom.student-submissions.me.readonly`: clases, estados y enlaces, sin títulos ni fechas inventados. El modo de actividades completas es opcional y requiere su propio scope. Consulta [permisos y límites oficiales](docs/classroom-permissions.md).
+
+```sh
+node --test tests/submissions.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/submissions-browser.cjs
+```

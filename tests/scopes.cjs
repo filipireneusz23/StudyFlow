@@ -74,6 +74,7 @@ test("realistic callback scopes gate identity, preserve data, and a fresh consen
       JSON.stringify({
         clientId: "scope-test.apps.googleusercontent.com",
         mapping: {},
+        accessMode: "full",
       }),
     ],
     ["studyflow-v1", "unchanged"],

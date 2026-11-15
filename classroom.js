@@ -9,9 +9,15 @@
     "openid",
     "email",
   ];
+  const SUBMISSION_SCOPES = [
+    SCOPES[0],
+    "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
+    "openid",
+    "email",
+  ];
   // TokenResponse.scope is the granted set, not the scopes configured in Cloud.
   // Google can serialize the OIDC "email" alias as userinfo.email.
-  function inspectScopes(response, oauth) {
+  function inspectScopes(response, oauth, requested = SCOPES) {
     const reported = typeof response?.scope === "string";
     const raw = reported
       ? response.scope.trim().split(/\s+/).filter(Boolean)
@@ -28,7 +34,7 @@
         ),
       ),
     ];
-    const checks = SCOPES.map((scope) => {
+    const checks = requested.map((scope) => {
       const aliases =
         scope === "email"
           ? ["email", "https://www.googleapis.com/auth/userinfo.email"]
@@ -46,7 +52,7 @@
     });
     return {
       reported,
-      requested: [...SCOPES],
+      requested: [...requested],
       granted,
       missing: checks.filter((c) => !c.granted).map((c) => c.scope),
       unconfirmed: checks
@@ -58,6 +64,8 @@
     const actions = {
       [SCOPES[0]]: "permitir consultar tus clases",
       [SCOPES[1]]: "permitir consultar tus actividades y entregas propias",
+      [SUBMISSION_SCOPES[1]]: "permitir consultar tus entregas propias",
+
       openid: "autorizar la identificación básica de tu cuenta",
       email: "autorizar el correo básico de tu cuenta",
     };
@@ -152,7 +160,7 @@
       availability: course.courseState === "ACTIVE" ? "active" : "archived",
     };
   }
-  function mergeSnapshot(previous, courses, tasks) {
+  function mergeSnapshot(previous, courses, tasks, mode = "full") {
     const ids = new Set(tasks.map((t) => t.id)),
       byCourse = new Map(courses.map((c) => [String(c.id), c]));
     const old = previous.tasks
@@ -161,10 +169,48 @@
         ...t,
         availability:
           byCourse.get(t.courseId)?.courseState === "ACTIVE"
-            ? "removed"
+            ? mode === "submissions"
+              ? "unavailable"
+              : "removed"
             : "archived",
       }));
     return [...tasks, ...old];
+  }
+  function normalizeSubmission(course, submission, previous) {
+    if (!submission.courseWorkId)
+      throw Error(
+        "Google devolvió una entrega sin identificador de actividad. Se conserva la copia anterior.",
+      );
+    const status = submission.state || "UNKNOWN";
+    const item = {
+      id: `classroom:${course.id}:${submission.courseWorkId}`,
+      courseId: String(course.id),
+      workId: String(submission.courseWorkId),
+      submissionId: String(submission.id || ""),
+      name: `Entrega propia · actividad ${submission.courseWorkId}`,
+      description:
+        "El permiso de entregas propias no permite consultar el título, el enunciado ni la fecha de la actividad. Abre el enlace oficial de Classroom para verlos.",
+      courseName: course.name,
+      due: null,
+      dueAt: null,
+      status,
+      done: ["TURNED_IN", "RETURNED"].includes(status),
+      url: safeLink(submission.alternateLink),
+      origin: "classroom",
+      availability: "active",
+      limited: true,
+      late: submission.late === true,
+    };
+    if (previous?.previousMetadata)
+      item.previousMetadata = previous.previousMetadata;
+    else if (previous && !previous.limited)
+      item.previousMetadata = {
+        name: previous.name,
+        description: previous.description,
+        due: previous.due,
+        dueAt: previous.dueAt,
+      };
+    return item;
   }
   function loadGoogle() {
     if (root.google?.accounts?.oauth2) return Promise.resolve(root.google);
@@ -242,7 +288,7 @@
         identityVerified: false,
         apiStep: "",
         code: "",
-        requestedScopes: [...SCOPES],
+        requestedScopes: [...SUBMISSION_SCOPES],
         grantedScopes: [],
         missingScopes: [],
         unconfirmedScopes: [],
@@ -252,7 +298,7 @@
       this.busy = false;
       this.ready = false;
       this.loading = false;
-      this.config = { clientId: "", mapping: {} };
+      this.config = { clientId: "", mapping: {}, accessMode: "submissions" };
       this.cache = empty();
       this.corrupt = false;
       try {
@@ -296,6 +342,12 @@
           "No se pudo leer la copia local de Classroom. No se ha sobrescrito; conserva una copia de los datos del navegador antes de recuperarla.";
       }
     }
+    get accessMode() {
+      return this.config.accessMode === "full" ? "full" : "submissions";
+    }
+    get scopes() {
+      return this.accessMode === "full" ? SCOPES : SUBMISSION_SCOPES;
+    }
     get connected() {
       return Boolean(
         this.#identityVerified && this.#token && this.now() < this.#expires,
@@ -315,7 +367,7 @@
       this.error = error.message || String(error);
       this.emit();
     }
-    saveConfig(clientId) {
+    saveConfig(clientId, accessMode = this.accessMode) {
       clientId = clientId.trim();
       if (clientId && !/^[\w-]+\.apps\.googleusercontent\.com$/.test(clientId))
         throw Error(
@@ -324,7 +376,9 @@
       if (this.corrupt) throw Error(this.error);
       if (this.connected || this.busy)
         throw Error("Desconecta Classroom antes de cambiar el Client ID.");
-      const config = { ...this.config, clientId };
+      if (!["full", "submissions"].includes(accessMode))
+        throw Error("Modo de acceso no válido.");
+      const config = { ...this.config, clientId, accessMode };
       this.storage.setItem(CONFIG_KEY, JSON.stringify(config));
       this.config = config;
       this.ready = false;
@@ -385,7 +439,7 @@
         identityVerified: false,
         apiStep: "",
         code: "",
-        requestedScopes: [...SCOPES],
+        requestedScopes: [...this.scopes],
         grantedScopes: [],
         missingScopes: [],
         unconfirmedScopes: [],
@@ -423,7 +477,7 @@
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: this.config.clientId,
-          scope: SCOPES.join(" "),
+          scope: this.scopes.join(" "),
           include_granted_scopes: false, // Limit this token request to the four requested permissions.
           error_callback: (error) => {
             if (
@@ -496,6 +550,7 @@
               const permissions = inspectScopes(
                 response,
                 google.accounts.oauth2,
+                this.scopes,
               );
               Object.assign(this.diagnostics, {
                 requestedScopes: permissions.requested,
@@ -843,18 +898,38 @@
           for (const course of courses) {
             if (course.courseState !== "ACTIVE") continue;
             const path = `courses/${encodeURIComponent(course.id)}/courseWork`;
-            const works = await this.list(
-              path,
-              "courseWork",
-              { courseWorkStates: "PUBLISHED" },
-              generation,
-            );
+            const works =
+              this.accessMode === "full"
+                ? await this.list(
+                    path,
+                    "courseWork",
+                    { courseWorkStates: "PUBLISHED" },
+                    generation,
+                  )
+                : [];
             const submissions = await this.list(
               path + "/-/studentSubmissions",
               "studentSubmissions",
-              { userId: "me" },
+              {
+                userId: "me",
+                fields:
+                  "studentSubmissions(id,courseId,courseWorkId,state,late,alternateLink),nextPageToken",
+              },
               generation,
             );
+            if (this.accessMode === "submissions") {
+              for (const submission of new Map(
+                submissions.map((item) => [String(item.courseWorkId), item]),
+              ).values()) {
+                const old = this.cache.tasks.find(
+                  (item) =>
+                    item.id ===
+                    `classroom:${course.id}:${submission.courseWorkId}`,
+                );
+                tasks.push(normalizeSubmission(course, submission, old));
+              }
+              continue;
+            }
             const byWork = new Map(
               submissions.map((s) => [String(s.courseWorkId), s]),
             );
@@ -872,7 +947,8 @@
           const next = {
             account: this.cache.account,
             courses,
-            tasks: mergeSnapshot(this.cache, courses, tasks),
+            tasks: mergeSnapshot(this.cache, courses, tasks, this.accessMode),
+            accessMode: this.accessMode,
             lastSync: new Date(this.now()).toISOString(),
           };
           try {
@@ -917,7 +993,7 @@
         identityVerified: false,
         apiStep: "",
         code: "",
-        requestedScopes: [...SCOPES],
+        requestedScopes: [...this.scopes],
         grantedScopes: [],
         missingScopes: [],
         unconfirmedScopes: [],
@@ -969,6 +1045,8 @@
   const exports = {
     ClassroomClient,
     inspectScopes,
+    SUBMISSION_SCOPES,
+    normalizeSubmission,
     normalizeWork,
     mergeSnapshot,
     safeLink,

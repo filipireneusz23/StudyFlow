@@ -43,6 +43,9 @@ const assert = require("node:assert/strict");
     await page
       .locator("#classroomConfig input")
       .fill("oauth-test.apps.googleusercontent.com");
+    await page
+      .locator("#classroomConfig select[name=accessMode]")
+      .selectOption("full");
     await page.getByRole("button", { name: "Guardar Client ID" }).click();
     await page.waitForFunction(
       () =>

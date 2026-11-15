@@ -95,7 +95,7 @@ function harness() {
     setPages: () => (pages = true),
     advance: (ms) => (clock += ms),
     async connect() {
-      client.saveConfig("test-client.apps.googleusercontent.com");
+      client.saveConfig("test-client.apps.googleusercontent.com", "full");
       await new Promise((r) => setImmediate(r));
       client.connect();
       await callback({
@@ -277,6 +277,7 @@ test("invalid imported cache is preserved rather than overwritten or rendered", 
       JSON.stringify({
         clientId: "test.apps.googleusercontent.com",
         mapping: {},
+        accessMode: "full",
       }),
     ],
     [CACHE_KEY, '{"tasks":[null],"courses":[]}'],
