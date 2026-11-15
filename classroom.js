@@ -9,6 +9,66 @@
     "openid",
     "email",
   ];
+  // TokenResponse.scope is the granted set, not the scopes configured in Cloud.
+  // Google can serialize the OIDC "email" alias as userinfo.email.
+  function inspectScopes(response, oauth) {
+    const reported = typeof response?.scope === "string";
+    const raw = reported
+      ? response.scope.trim().split(/\s+/).filter(Boolean)
+      : [];
+    const granted = [
+      ...new Set(
+        raw.filter(
+          (scope) =>
+            scope !== response?.access_token &&
+            (["openid", "email", "profile"].includes(scope) ||
+              /^https:\/\/www\.googleapis\.com\/auth\/[a-zA-Z0-9._/-]+$/.test(
+                scope,
+              )),
+        ),
+      ),
+    ];
+    const checks = SCOPES.map((scope) => {
+      const aliases =
+        scope === "email"
+          ? ["email", "https://www.googleapis.com/auth/userinfo.email"]
+          : [scope];
+      const actual = aliases.find((alias) => granted.includes(alias));
+      let sdkConfirmed = false;
+      if (actual) {
+        try {
+          sdkConfirmed = oauth.hasGrantedAllScopes(response, actual) === true;
+        } catch {
+          /* fail closed if GIS cannot validate */
+        }
+      }
+      return { scope, granted: Boolean(actual), sdkConfirmed };
+    });
+    return {
+      reported,
+      requested: [...SCOPES],
+      granted,
+      missing: checks.filter((c) => !c.granted).map((c) => c.scope),
+      unconfirmed: checks
+        .filter((c) => c.granted && !c.sdkConfirmed)
+        .map((c) => c.scope),
+    };
+  }
+  function missingScopeMessage(missing) {
+    const actions = {
+      [SCOPES[0]]: "permitir consultar tus clases",
+      [SCOPES[1]]: "permitir consultar tus actividades y entregas propias",
+      openid: "autorizar la identificación básica de tu cuenta",
+      email: "autorizar el correo básico de tu cuenta",
+    };
+    return (
+      "Permisos insuficientes. Google no concedió: " +
+      missing.join(", ") +
+      ". Vuelve a conectar y acepta: " +
+      missing.map((s) => actions[s]).join("; ") +
+      ". Si Google no ofrece esas opciones, revisa Acceso a los datos y Usuarios de prueba del proyecto del Client ID; en una cuenta educativa, pide al administrador autorizar ese Client ID y estos permisos. Añadir scopes en Google Cloud no concede el permiso por la cuenta."
+    );
+  }
   const CONFIG_KEY = "studyflow-classroom-config",
     CACHE_KEY = "studyflow-classroom-cache";
   const empty = () => ({
@@ -182,6 +242,11 @@
         identityVerified: false,
         apiStep: "",
         code: "",
+        requestedScopes: [...SCOPES],
+        grantedScopes: [],
+        missingScopes: [],
+        unconfirmedScopes: [],
+        scopesReported: false,
       };
       this.error = "";
       this.busy = false;
@@ -320,6 +385,11 @@
         identityVerified: false,
         apiStep: "",
         code: "",
+        requestedScopes: [...SCOPES],
+        grantedScopes: [],
+        missingScopes: [],
+        unconfirmedScopes: [],
+        scopesReported: false,
       };
       this.busy = true;
       this.phase = "waiting";
@@ -354,7 +424,7 @@
         const client = google.accounts.oauth2.initTokenClient({
           client_id: this.config.clientId,
           scope: SCOPES.join(" "),
-          include_granted_scopes: false,
+          include_granted_scopes: false, // Limit this token request to the four requested permissions.
           error_callback: (error) => {
             if (
               this.diagnostics.callbackReceived ||
@@ -423,15 +493,34 @@
                   "Se recibió el callback de Google, pero no una autorización de acceso. Vuelve a conectar y acepta los permisos.",
                 );
               }
-              if (
-                !google.accounts.oauth2.hasGrantedAllScopes(
-                  response,
-                  ...SCOPES.slice(0, 2),
-                )
-              ) {
-                this.diagnostics.code = "insufficient_scope";
+              const permissions = inspectScopes(
+                response,
+                google.accounts.oauth2,
+              );
+              Object.assign(this.diagnostics, {
+                requestedScopes: permissions.requested,
+                grantedScopes: permissions.granted,
+                missingScopes: permissions.missing,
+                unconfirmedScopes: permissions.unconfirmed,
+                scopesReported: permissions.reported,
+              });
+              this.emit();
+              if (!permissions.reported) {
+                this.diagnostics.code = "scope_response_missing";
                 throw Error(
-                  "Permisos insuficientes: Google respondió, pero no concedió la lectura de clases y actividades. Vuelve a conectar y acepta ambos permisos.",
+                  "Google devolvió una autorización sin la lista de permisos concedidos. No es posible verificarla: recarga la página y vuelve a conectar. No se ha consultado tu cuenta ni Classroom.",
+                );
+              }
+              if (permissions.missing.length) {
+                this.diagnostics.code = "insufficient_scope";
+                throw Error(missingScopeMessage(permissions.missing));
+              }
+              if (permissions.unconfirmed.length) {
+                this.diagnostics.code = "scope_validation_failed";
+                throw Error(
+                  "La respuesta enumera todos los permisos, pero Google Identity Services no pudo confirmar: " +
+                    permissions.unconfirmed.join(", ") +
+                    ". Recarga StudyFlow para cargar la biblioteca oficial y revisa bloqueadores o extensiones. No se continúa con una validación contradictoria.",
                 );
               }
               if (
@@ -488,7 +577,7 @@
           },
         });
         // Keep this call in the click handler: GIS needs browser user activation.
-        client.requestAccessToken({ prompt: "select_account" });
+        client.requestAccessToken({ prompt: "consent select_account" });
       } catch {
         failed(
           "No se pudo iniciar la autorización de Google. Recarga el acceso de Google y vuelve a intentarlo.",
@@ -828,6 +917,11 @@
         identityVerified: false,
         apiStep: "",
         code: "",
+        requestedScopes: [...SCOPES],
+        grantedScopes: [],
+        missingScopes: [],
+        unconfirmedScopes: [],
+        scopesReported: false,
       };
       ++this.#generation;
       this.#token = null;
@@ -874,6 +968,7 @@
   }
   const exports = {
     ClassroomClient,
+    inspectScopes,
     normalizeWork,
     mergeSnapshot,
     safeLink,

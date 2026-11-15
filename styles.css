@@ -857,3 +857,21 @@ button:disabled {
   background: #40305f;
   outline: 1px solid #c4b5fd;
 }
+.oauth-diagnostics code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 11px;
+}
+.oauth-diagnostics ul {
+  padding-left: 18px;
+}
+.oauth-diagnostics li {
+  margin-bottom: 8px;
+}
+.oauth-diagnostics h4 {
+  font-size: 12px;
+  margin: 16px 0 8px;
+}
+.integration-card {
+  overflow-wrap: anywhere;
+}

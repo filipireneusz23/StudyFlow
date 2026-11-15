@@ -41,7 +41,10 @@ function harness() {
           callback = config.callback;
           return { requestAccessToken: () => {} };
         },
-        hasGrantedAllScopes: () => mode !== "partial",
+        hasGrantedAllScopes: (response, ...scopes) =>
+          scopes.every((scope) =>
+            (response.scope || "").split(/\s+/).includes(scope),
+          ),
         revoke: (token, cb) => {
           revoked = token === "IN_MEMORY_TOKEN";
           cb({});
@@ -98,7 +101,10 @@ function harness() {
       await callback({
         access_token: "IN_MEMORY_TOKEN",
         expires_in: 3600,
-        scope: SCOPES.join(" "),
+        scope: (mode === "partial"
+          ? SCOPES.filter((_, i) => i !== 1)
+          : SCOPES
+        ).join(" "),
       });
     },
   };

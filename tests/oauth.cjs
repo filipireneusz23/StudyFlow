@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { ClassroomClient, CONFIG_KEY } = require("../classroom.js");
+const { ClassroomClient, CONFIG_KEY, SCOPES } = require("../classroom.js");
 const TOKEN = "DO_NOT_EXPOSE_TEST_TOKEN";
 function fixture(options = {}) {
   const store = new Map([
@@ -21,7 +21,10 @@ function fixture(options = {}) {
           callbacks = c;
           return { requestAccessToken() {} };
         },
-        hasGrantedAllScopes: () => options.scopes !== false,
+        hasGrantedAllScopes: (response, ...scopes) =>
+          scopes.every((scope) =>
+            (response.scope || "").split(/\s+/).includes(scope),
+          ),
         revoke: (token, cb) => cb({ successful: true }),
       },
     },
@@ -55,7 +58,16 @@ function fixture(options = {}) {
       await client.prepare();
       client.connect();
     },
-    complete(response = { access_token: TOKEN, expires_in: 3600 }) {
+    complete(
+      response = {
+        access_token: TOKEN,
+        expires_in: 3600,
+        scope: (options.scopes === false
+          ? SCOPES.filter((_, i) => i !== 1)
+          : SCOPES
+        ).join(" "),
+      },
+    ) {
       return callbacks.callback(response);
     },
   };
@@ -137,6 +149,11 @@ test("popup closure after callback cannot cancel identity verification; duplicat
       identityVerified: true,
       apiStep: "courses",
       code: "",
+      requestedScopes: [...SCOPES],
+      grantedScopes: [...SCOPES],
+      missingScopes: [],
+      unconfirmedScopes: [],
+      scopesReported: true,
     });
     await h.complete({ error: "invalid_client" });
     assert.equal(h.client.phase, "complete");

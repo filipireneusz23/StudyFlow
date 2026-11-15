@@ -29,7 +29,7 @@ const assert = require("node:assert/strict");
     await page.route("https://accounts.google.com/gsi/client", (route) =>
       route.fulfill({
         contentType: "application/javascript",
-        body: `window.google={accounts:{oauth2:{hasGrantedAllScopes:()=>true,initTokenClient:options=>({requestAccessToken:()=>options.callback({access_token:'TEST_ONLY_TOKEN',expires_in:3600})}),revoke:(token,callback)=>callback({})}}};`,
+        body: `window.google={accounts:{oauth2:{hasGrantedAllScopes:()=>true,initTokenClient:options=>({requestAccessToken:()=>options.callback({access_token:'TEST_ONLY_TOKEN',expires_in:3600,scope:options.scope})}),revoke:(token,callback)=>callback({})}}};`,
       }),
     );
     await page.route("https://openidconnect.googleapis.com/**", (route) =>

@@ -81,6 +81,58 @@ const assert = require("node:assert/strict");
       oauthTestCallbacks.callback({
         access_token: "TEST_ONLY_OAUTH_SECRET",
         expires_in: 3600,
+        scope: oauthTestCallbacks.scope
+          .split(" ")
+          .filter(
+            (scope) => !scope.endsWith("classroom.coursework.me.readonly"),
+          )
+          .join(" "),
+      }),
+    );
+    assert.match(
+      await page.getByRole("alert").innerText(),
+      /classroom.coursework.me.readonly/,
+    );
+    await page.locator(".oauth-diagnostics summary").click();
+    assert.equal(
+      await page
+        .getByRole("heading", { name: "Permisos solicitados", exact: true })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await page
+        .getByRole("heading", {
+          name: "Permisos concedidos por Google",
+          exact: true,
+        })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await page
+        .getByRole("heading", { name: "Permisos que faltan", exact: true })
+        .count(),
+      1,
+    );
+    assert.match(
+      await page.locator(".oauth-diagnostics").innerText(),
+      /Consulta: Todavía sin consulta/,
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await connect();
+    await page.evaluate(() =>
+      oauthTestCallbacks.callback({
+        access_token: "TEST_ONLY_OAUTH_SECRET",
+        expires_in: 3600,
+        scope: oauthTestCallbacks.scope,
       }),
     );
     assert.match(
@@ -114,6 +166,7 @@ const assert = require("node:assert/strict");
       oauthTestCallbacks.callback({
         access_token: "TEST_ONLY_OAUTH_SECRET",
         expires_in: 3600,
+        scope: oauthTestCallbacks.scope,
       }),
     );
     assert.match(await page.getByRole("alert").innerText(), /identidad.*403/);

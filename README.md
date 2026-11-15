@@ -56,6 +56,8 @@ Ajustes → Integraciones permite configurar un OAuth Client ID de aplicación w
 Consulta la [guía completa de Google Cloud y conexión](docs/google-classroom.md). No se ha realizado una autorización real de Google durante este desarrollo; las pruebas usan respuestas controladas.
 
 ```sh
-node --test tests/classroom.cjs
+node --test tests/classroom.cjs tests/oauth.cjs tests/scopes.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/classroom-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/oauth-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/scopes-browser.cjs
 ```

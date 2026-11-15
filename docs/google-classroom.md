@@ -116,3 +116,29 @@ El aviso `Cross-Origin-Opener-Policy ... window.closed` por sí solo no prueba q
 Para informar de un fallo basta con compartir el mensaje visible, el código y los indicadores sí/no. No compartas tokens, cabeceras Authorization ni respuestas completas de Google.
 
 Pruebas adicionales: `node --test tests/oauth.cjs` y `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/oauth-browser.cjs`. Reproducen eventos y respuestas controladas, incluida la falta de callback; no sustituyen una autorización real con una cuenta educativa.
+
+## Si aparece `insufficient_scope`
+
+Este código se produce **antes de consultar la identidad o Classroom**, al validar lo concedido por Google. Que haya llegado un token no implica que incluya todos los permisos. La lista de permisos en Google Cloud es una declaración de la aplicación; no equivale al consentimiento de la cuenta.
+
+**Detalles de conexión** muestra ahora los permisos solicitados, los concedidos realmente en `TokenResponse.scope` y los que faltan. Se comprueban los cuatro permisos, uno a uno, con los metadatos de la respuesta y el helper oficial de GIS. La forma canónica `https://www.googleapis.com/auth/userinfo.email` se reconoce como equivalente a `email`; no se sustituye ningún permiso de Classroom por otro diferente. Una lista ausente o una contradicción con GIS bloquea el flujo con un código específico, en lugar de suponer que el token es válido.
+
+Para volver a autorizar, **Conectar** solicita explícitamente consentimiento (`prompt: consent select_account`), manteniendo los mismos cuatro permisos y `include_granted_scopes: false`. No se piden permisos adicionales ni se reutilizan tokens guardados. En el consentimiento de Google marca las dos opciones de lectura de Classroom y la identidad básica solicitada.
+
+| Permiso que falta                  | Acción concreta                                                                                                                                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `classroom.courses.readonly`       | Acepta la lectura de tus clases; comprueba que el permiso completo `https://www.googleapis.com/auth/classroom.courses.readonly` esté declarado en Google Auth Platform → Acceso a los datos.                                                               |
+| `classroom.coursework.me.readonly` | Acepta la lectura de tus actividades y entregas propias; declara `https://www.googleapis.com/auth/classroom.coursework.me.readonly` en Acceso a los datos del proyecto del Client ID usado por StudyFlow. Un permiso de entregas distinto no lo sustituye. |
+| `openid`                           | Autoriza la identificación básica; revisa las restricciones de consentimiento de la organización. No se omite la verificación de identidad.                                                                                                                |
+| `email`                            | Autoriza el correo básico (`email` o su forma canónica `userinfo.email`). No se solicita acceso a Gmail.                                                                                                                                                   |
+
+Si Google no ofrece las opciones o sigue omitiéndolas pese a aceptarlas:
+
+1. Comprueba que el Client ID introducido corresponde al **mismo proyecto** cuyo consentimiento has configurado y que es de tipo aplicación web. Su origen debe ser `https://filipireneusz23.github.io`, sin ruta.
+2. Para aplicaciones externas en pruebas, añade el **correo exacto de la cuenta que seleccionas** en Google Auth Platform → Público → Usuarios de prueba. Para aplicaciones internas, la cuenta debe pertenecer a esa organización.
+3. En una cuenta educativa, pide al administrador revisar **Consola de administración de Google Workspace → Seguridad → Controles de acceso y de datos → Controles de API → Control de acceso de aplicaciones**. Debe localizar el OAuth Client ID exacto y permitir los permisos de Classroom requeridos para tu unidad organizativa o grupo, según la política del centro. El usuario no puede anular esa restricción desde StudyFlow.
+4. Si es necesario reiniciar el consentimiento, retira StudyFlow en las conexiones de tu cuenta de Google y vuelve a conectar. No borres los datos del navegador ni tus datos personales de StudyFlow.
+
+Habilitar Classroom API es necesario para consultar clases, pero no demuestra que un token tenga los scopes. Si los cuatro figuran concedidos y confirmados, el flujo pasa a identidad y luego a la API; los errores posteriores tienen sus propios mensajes. `scope_validation_failed` indica que la lista recibida y GIS no coinciden: recarga la página para usar la biblioteca oficial y revisa extensiones; no se autoriza ignorando esa contradicción.
+
+El modelo de solicitud se contrastó también con el [quickstart oficial de Google Workspace para navegadores](https://github.com/googleworkspace/browser-samples/blob/main/classroom/quickstart/index.html), que solicita scopes separados por espacios y usa `prompt: consent` para una sesión nueva. Las pruebas locales reproducen el origen y funcionamiento estático de GitHub Pages, pero **no acreditan** una concesión real de tu cuenta. Para identificar la restricción concreta que persista basta con compartir las listas de scopes y el código, nunca el token.
