@@ -7,6 +7,7 @@
     <title>StudyFlow · 3.0</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="academic-calendar.js" defer></script>
+    <script src="classroom.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -94,6 +95,20 @@
         <button id="dayTask">＋ Nueva tarea</button
         ><button id="dayExam" class="secondary">＋ Examen</button>
       </div>
+    </dialog>
+    <dialog id="classroomDetails" aria-labelledby="classroomTaskTitle">
+      <div class="section-head">
+        <h2 id="classroomTaskTitle"></h2>
+        <button
+          id="closeClassroomDetails"
+          type="button"
+          class="secondary"
+          aria-label="Cerrar actividad"
+        >
+          ×
+        </button>
+      </div>
+      <div id="classroomTaskBody"></div>
     </dialog>
     <div id="toast" role="status" aria-live="polite"></div>
   </body>

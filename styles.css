@@ -783,3 +783,77 @@ footer {
 .swatch.milestone {
   background: #64748b;
 }
+/* Weekend is purple; confirmed holiday/closure wins over weekend. */
+.day.weekend {
+  background: #581c87;
+}
+.day .day-number {
+  color: #fff;
+}
+.day.weekend.today .day-number {
+  background: #3b125b;
+  outline: 1px solid #fff;
+}
+.swatch.weekend {
+  background: #581c87;
+  border: 1px solid #d8b4fe;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.integration-title {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 22px;
+}
+.classroom-logo {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+.classroom-tag {
+  background: #163d30;
+  color: #a9e7c4;
+}
+.classroom-mark {
+  color: #96dfb2;
+}
+.integration-card .actions {
+  flex-wrap: wrap;
+}
+#classroomConfig {
+  margin-top: 22px;
+}
+.course-mappings {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.task-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0;
+}
+.task-filters label {
+  flex: 1;
+  min-width: 130px;
+}
+.task-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.7;
+}
+#classroomTaskTitle {
+  overflow-wrap: anywhere;
+}
+.row-actions a {
+  padding: 5px;
+}
+.day.today:not(.weekend):not(.non-teaching) .day-number {
+  background: #40305f;
+  outline: 1px solid #c4b5fd;
+}

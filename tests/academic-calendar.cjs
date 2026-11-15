@@ -60,7 +60,7 @@ const assert = require("node:assert/strict");
     const day = page.locator('[data-date="2026-11-15"]');
     assert.equal(
       await day.evaluate((e) => getComputedStyle(e).backgroundColor),
-      "rgb(127, 29, 29)",
+      "rgb(88, 28, 135)",
     );
     assert.equal(
       await day
@@ -169,11 +169,19 @@ const assert = require("node:assert/strict");
       const mismatches = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".day[data-date]"))
           .filter((cell) => {
-            const off = academicDay(cell.dataset.date).nonTeaching;
+            const info = academicDay(cell.dataset.date);
+            const off = info.nonTeaching;
+            const expectedColor = info.events.some((e) => e.nonTeaching)
+              ? "rgb(127, 29, 29)"
+              : info.weekend
+                ? "rgb(88, 28, 135)"
+                : null;
             return (
-              (getComputedStyle(cell).backgroundColor ===
-                "rgb(127, 29, 29)") !==
-                off ||
+              (expectedColor
+                ? getComputedStyle(cell).backgroundColor !== expectedColor
+                : ["rgb(127, 29, 29)", "rgb(88, 28, 135)"].includes(
+                    getComputedStyle(cell).backgroundColor,
+                  )) ||
               (off &&
                 getComputedStyle(cell.querySelector(".day-number")).color !==
                   "rgb(255, 255, 255)")
@@ -209,7 +217,7 @@ const assert = require("node:assert/strict");
     });
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: weekend cell colors, white numbers, coincident task/exam colors, reasons, both day creation actions, visibility, year navigation, verified official periods and local holidays, reload without duplicates, exact personal data preservation, mobile. All 365 course day colors validated against the verified model.",
+      "PASS: weekend cell colors, white numbers, coincident task/exam colors, reasons, both day creation actions, visibility, year navigation, verified official periods and local holidays, reload without duplicates, exact personal data preservation, mobile. All 365 day colors checked, with red holiday precedence over purple weekends.",
     );
   } finally {
     await browser.close();

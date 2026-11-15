@@ -46,7 +46,7 @@ e53c2ec8ed40b105b4e181e2270e9dc6a0a7177ce61beaf577d35cea5dbe4afb
 | 23 y 26/07/2027                  | Fiestas locales de Cabezuela del Valle                                                                                               | 1, anexo         |
 | 15/08/2027                       | Asunción, domingo                                                                                                                    | 2, artículos 1–2 |
 
-Todos los sábados y domingos se muestran como días sin clases ordinarias. Los puentes confirmados resultan de estos festivos junto a fines de semana: no se añade, por ejemplo, el viernes 4 de diciembre. La resolución no declara ese viernes no lectivo; aparece en la tabla de celebraciones pedagógicas, que no suspenden las clases.
+Todos los sábados y domingos se muestran como días sin clases ordinarias en morado oscuro (`#581C87`); cuando coinciden con una festividad o un periodo confirmado sin clase prevalece el rojo oscuro (`#7F1D1D`). Los puentes confirmados resultan de estos festivos junto a fines de semana: no se añade, por ejemplo, el viernes 4 de diciembre. La resolución no declara ese viernes no lectivo; aparece en la tabla de celebraciones pedagógicas, que no suspenden las clases.
 
 ## Límites que se respetan
 
@@ -59,6 +59,6 @@ Todos los sábados y domingos se muestran como días sin clases ordinarias. Los 
 
 ## Datos, visualización y pruebas
 
-Los eventos oficiales son constantes independientes del estado personal, con intervalos inclusivos y fuente individual. No se guardan ni se duplican en `studyflow-v1`. Mostrar/ocultar marcas cambia únicamente la vista. Todos los días sin clases ordinarias tienen fondo `#7F1D1D` y número blanco; vacaciones verdes, festivos naranjas, tareas azules y exámenes rojo intenso. Se mantienen eventos personales aunque coincidan con vacaciones o festivos.
+Los eventos oficiales son constantes independientes del estado personal, con intervalos inclusivos y fuente individual. No se guardan ni se duplican en `studyflow-v1`. Mostrar/ocultar marcas cambia únicamente la vista. Los fines de semana tienen fondo `#581C87`, y los festivos y periodos confirmados sin clases tienen fondo `#7F1D1D` que prevalece en las coincidencias; los números de los días son blancos; vacaciones verdes, festivos naranjas, tareas azules y exámenes rojo intenso. Se mantienen eventos personales aunque coincidan con vacaciones o festivos.
 
 `tests/academic-data.cjs` contrasta la tabla completa con las expectativas transcritas de los documentos, las 365 clasificaciones diarias, los límites y las exclusiones. `tests/academic-calendar.cjs` verifica colores en los 12 meses, motivos, periodos completos, convivencia con eventos personales, recarga sin duplicados, navegación entre años y conservación exacta de tareas, exámenes, asignaturas y ajustes. `tests/smoke.cjs` mantiene las comprobaciones generales de StudyFlow.
