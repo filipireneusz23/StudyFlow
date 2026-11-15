@@ -77,7 +77,12 @@ const assert = require("node:assert/strict");
                 },
               ],
             };
-      return route.fulfill({ json });
+      const getId = new URL(url).pathname.match(/\/courseWork\/([^/]+)$/)?.[1];
+      return route.fulfill({
+        json: getId
+          ? json.courseWork.find((w) => w.id === decodeURIComponent(getId))
+          : json,
+      });
     });
     await page.goto("http://127.0.0.1:8000/#settings");
     assert.equal(
@@ -260,7 +265,7 @@ const assert = require("node:assert/strict");
       await page.getByText("Desconectado", { exact: true }).count(),
       1,
     );
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     assert.deepEqual(errors, []);
     console.log(
       "PASS: mocked OAuth, settings states, identity, subject mapping, origin/subject filters, missing due date, UTC conversion, personal event coexistence, red holiday precedence, purple weekend, details/link escaping, disconnect/reload, no stored tokens, exact data preservation, mobile. No real Google authorization was performed.",

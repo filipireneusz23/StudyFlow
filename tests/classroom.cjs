@@ -69,6 +69,13 @@ function harness() {
       return Response.json({
         studentSubmissions: [{ courseWorkId: "a", state: "TURNED_IN" }],
       });
+    const getId = new URL(url).pathname.match(/\/courseWork\/([^/]+)$/)?.[1];
+    if (getId) {
+      const work = works.find(
+        (w) => String(w.id) === decodeURIComponent(getId),
+      );
+      return work ? Response.json(work) : new Response("", { status: 404 });
+    }
     if (url.includes("courseWork")) return Response.json({ courseWork: works });
     if (pages && !url.includes("pageToken"))
       return Response.json({ courses, nextPageToken: "second" });

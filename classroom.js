@@ -99,6 +99,20 @@
     }
   }
   function normalizeWork(course, work, submission) {
+    if (
+      work.courseId !== undefined &&
+      String(work.courseId) !== String(course.id)
+    )
+      throw Error(
+        "La actividad pertenece a otra clase. Se conserva la copia anterior.",
+      );
+    if (
+      submission?.courseWorkId !== undefined &&
+      String(submission.courseWorkId) !== String(work.id)
+    )
+      throw Error(
+        "La entrega no corresponde a esta actividad. Se conserva la copia anterior.",
+      );
     if (!course.id || !work.id)
       throw Error(
         "Classroom devolvió una actividad sin identificador. Se conserva la copia anterior.",
@@ -282,6 +296,7 @@
       this.requestTimeoutMs = options.requestTimeoutMs ?? 20000;
       this.phase = "idle";
       this.progress = "";
+      this.metadataAccess = { list: "not_checked", get: "not_checked" };
       this.diagnostics = {
         callbackReceived: false,
         tokenReceived: false,
@@ -436,6 +451,35 @@
       this.config = config;
       this.emit();
     }
+    connectWithMode(mode) {
+      if (!["full", "submissions"].includes(mode) || this.busy) return;
+      if (!this.config.clientId) {
+        this.fail(Error("Configura primero el Client ID de Google Cloud."));
+        return;
+      }
+      if (this.corrupt) {
+        this.emit();
+        return;
+      }
+      if (!this.ready) {
+        this.prepare();
+        return;
+      }
+      try {
+        const config = { ...this.config, accessMode: mode };
+        this.storage.setItem(CONFIG_KEY, JSON.stringify(config));
+        this.config = config;
+      } catch {
+        this.fail(
+          Error(
+            "No se pudo guardar el modo de conexión. Se conserva la copia anterior.",
+          ),
+        );
+        return;
+      }
+      // One user gesture: preserve GIS popup activation, and never disconnect/delete the cache.
+      this.connect();
+    }
     connect({ restore = false } = {}) {
       if (!this.config.clientId) {
         this.fail(Error("Configura primero el Client ID de Google Cloud."));
@@ -468,6 +512,7 @@
         scopesReported: false,
       };
       this.busy = true;
+      this.metadataAccess = { list: "not_checked", get: "not_checked" };
       this.phase = "waiting";
       this.progress =
         "Esperando la respuesta de Google. Completa el consentimiento en la ventana de Google.";
@@ -836,11 +881,13 @@
             );
             continue;
           }
-          throw Error(
+          const failure = Error(
             response.status === 429
               ? "Google ha limitado las solicitudes. Espera antes de volver a sincronizar."
               : `No se pudo consultar ${labels[step]} (HTTP ${response.status}). Se conserva la copia anterior.`,
           );
+          failure.httpStatus = response.status;
+          throw failure;
         }
         if (!body || typeof body !== "object")
           throw Error(
@@ -849,6 +896,23 @@
         this.diagnostics.code = "";
         return body;
       }
+    }
+    async getCourseWork(courseId, workId, generation = this.#generation) {
+      const path = `https://classroom.googleapis.com/v1/courses/${encodeURIComponent(courseId)}/courseWork/${encodeURIComponent(workId)}`;
+      const data = await this.request(
+        path +
+          "?fields=id,courseId,title,description,dueDate,dueTime,alternateLink,state",
+        generation,
+      );
+      if (
+        String(data.id) !== String(workId) ||
+        (data.courseId !== undefined &&
+          String(data.courseId) !== String(courseId))
+      )
+        throw Error(
+          "Google devolvió una actividad que no corresponde a la entrega. Se conserva la copia anterior.",
+        );
+      return data;
     }
     async list(path, field, params = {}, generation = this.#generation) {
       const items = [],
@@ -862,7 +926,13 @@
           ...(pageToken ? { pageToken } : {}),
         }))
           url.searchParams.set(key, value);
-        const data = await this.request(url.href, generation);
+        let data;
+        try {
+          data = await this.request(url.href, generation);
+        } catch (error) {
+          if (path.endsWith("/courseWork")) this.metadataAccess.list = "failed";
+          throw error;
+        }
         if (data[field] !== undefined && !Array.isArray(data[field]))
           throw Error("Respuesta de Classroom no válida.");
         items.push(...(data[field] || []));
@@ -921,6 +991,7 @@
             ).values(),
           );
           const tasks = [];
+          let checkedGet = false;
           // Sequential requests bound concurrency. Every page must succeed before committing a snapshot.
           for (const course of courses) {
             if (course.courseState !== "ACTIVE") continue;
@@ -930,10 +1001,16 @@
                 ? await this.list(
                     path,
                     "courseWork",
-                    { courseWorkStates: "PUBLISHED" },
+                    {
+                      courseWorkStates: "PUBLISHED",
+                      fields:
+                        "courseWork(id,courseId,title,description,dueDate,dueTime,alternateLink,state),nextPageToken",
+                    },
                     generation,
                   )
                 : [];
+            if (this.accessMode === "full")
+              this.metadataAccess.list = "confirmed";
             const submissions = await this.list(
               path + "/-/studentSubmissions",
               "studentSubmissions",
@@ -957,6 +1034,14 @@
               }
               continue;
             }
+            for (const submission of submissions)
+              if (
+                submission.courseId !== undefined &&
+                String(submission.courseId) !== course.id
+              )
+                throw Error(
+                  "Google devolvió una entrega de otra clase. Se conserva la copia anterior.",
+                );
             const byWork = new Map(
               submissions.map((s) => [String(s.courseWorkId), s]),
             );
@@ -965,6 +1050,36 @@
                 .filter((w) => !w.state || w.state === "PUBLISHED")
                 .map((w) => [String(w.id), w]),
             );
+            // Verify GET on an actual accessible resource, not merely on a declared scope.
+            // Also resolve submissions whose original activity was absent from the list.
+            const lookup = new Set(
+              [...byWork.keys()].filter((id) => !unique.has(id)),
+            );
+            if (!checkedGet && unique.size)
+              lookup.add(unique.keys().next().value);
+            for (const id of lookup) {
+              try {
+                const work = await this.getCourseWork(
+                  course.id,
+                  id,
+                  generation,
+                );
+                checkedGet = true;
+                this.metadataAccess.get = "confirmed";
+                if (!work.state || work.state === "PUBLISHED")
+                  unique.set(id, work);
+                else unique.delete(id);
+              } catch (error) {
+                if (error.httpStatus === 404) {
+                  unique.delete(id);
+                  if (this.metadataAccess.get !== "confirmed")
+                    this.metadataAccess.get = "not_found";
+                  continue;
+                }
+                this.metadataAccess.get = "failed";
+                throw error;
+              }
+            }
             for (const work of unique.values())
               tasks.push(
                 normalizeWork(course, work, byWork.get(String(work.id))),
