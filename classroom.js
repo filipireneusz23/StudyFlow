@@ -145,6 +145,8 @@
     return loadGoogle.pending;
   }
   class ClassroomClient {
+    #authTimer = null;
+    #identityVerified = false;
     #google = null;
     #token = null;
     #expires = 0;
@@ -170,6 +172,17 @@
         (() => root.dispatchEvent(new Event("classroomchange")));
       this.sleep =
         options.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+      this.authTimeoutMs = options.authTimeoutMs ?? 90000;
+      this.requestTimeoutMs = options.requestTimeoutMs ?? 20000;
+      this.phase = "idle";
+      this.progress = "";
+      this.diagnostics = {
+        callbackReceived: false,
+        tokenReceived: false,
+        identityVerified: false,
+        apiStep: "",
+        code: "",
+      };
       this.error = "";
       this.busy = false;
       this.ready = false;
@@ -219,7 +232,9 @@
       }
     }
     get connected() {
-      return Boolean(this.#token && this.now() < this.#expires);
+      return Boolean(
+        this.#identityVerified && this.#token && this.now() < this.#expires,
+      );
     }
     get status() {
       return !this.config.clientId
@@ -294,48 +309,138 @@
         return;
       }
       if (this.busy) return;
+      clearTimeout(this.#authTimer);
+      clearTimeout(this.#expiryTimer);
+      this.#token = null;
+      this.#expires = 0;
+      this.#identityVerified = false;
+      this.diagnostics = {
+        callbackReceived: false,
+        tokenReceived: false,
+        identityVerified: false,
+        apiStep: "",
+        code: "",
+      };
       this.busy = true;
+      this.phase = "waiting";
+      this.progress =
+        "Esperando la respuesta de Google. Completa el consentimiento en la ventana de Google.";
       this.error = "";
       this.emit();
       const generation = ++this.#generation;
-      // requestAccessToken is called directly from a user click, preserving popup activation.
       const google = this.#google;
+      const failed = (message, code) => {
+        if (generation !== this.#generation) return;
+        clearTimeout(this.#authTimer);
+        this.#token = null;
+        this.#expires = 0;
+        this.#identityVerified = false;
+        this.busy = false;
+        this.phase = "failed";
+        this.progress = "No se ha completado la conexión.";
+        this.diagnostics.code = code;
+        ++this.#generation; // Late callbacks and identity responses cannot restore a failed attempt.
+        this.fail(Error(message));
+      };
+      this.#authTimer = setTimeout(
+        () =>
+          failed(
+            "Google no ha devuelto una respuesta a StudyFlow en 90 segundos. Puede que la ventana se haya cerrado antes de completar el consentimiento o que el navegador haya bloqueado la comunicación. Vuelve a conectar y completa todos los pasos de Google.",
+            "oauth_timeout",
+          ),
+        this.authTimeoutMs,
+      );
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: this.config.clientId,
           scope: SCOPES.join(" "),
           include_granted_scopes: false,
-          error_callback: () => {
-            if (generation !== this.#generation) return;
-            this.busy = false;
-            this.fail(
-              Error(
-                "No se completó el acceso de Google. Permite la ventana emergente y vuelve a conectar.",
-              ),
+          error_callback: (error) => {
+            if (
+              this.diagnostics.callbackReceived ||
+              generation !== this.#generation
+            )
+              return;
+            const messages = {
+              popup_failed_to_open:
+                "El navegador bloqueó la ventana de Google. Permite ventanas emergentes para StudyFlow y vuelve a conectar.",
+              popup_closed:
+                "La ventana de Google se cerró antes de devolver la autorización. Vuelve a conectar y completa el consentimiento.",
+            };
+            const code = Object.hasOwn(messages, error?.type)
+              ? error.type
+              : "popup_error";
+            failed(
+              messages[code] ||
+                "No se pudo completar el acceso de Google. Comprueba la ventana emergente y vuelve a conectar.",
+              code,
             );
           },
           callback: async (response) => {
-            if (generation !== this.#generation) return;
+            if (
+              generation !== this.#generation ||
+              this.diagnostics.callbackReceived
+            )
+              return;
+            clearTimeout(this.#authTimer);
+            this.diagnostics.callbackReceived = true;
+            this.diagnostics.tokenReceived =
+              typeof response?.access_token === "string" &&
+              response.access_token.length > 0;
+            this.phase = "identity";
+            this.progress =
+              "Respuesta de Google recibida. Comprobando permisos y cuenta…";
+            this.emit();
             try {
-              if (response.error)
+              if (!response || typeof response !== "object")
                 throw Error(
-                  "Google no autorizó el acceso. Comprueba el consentimiento, los usuarios de prueba y las restricciones del administrador.",
+                  "Google devolvió una respuesta OAuth vacía o no válida. Vuelve a conectar.",
                 );
+              if (response.error) {
+                const messages = {
+                  access_denied:
+                    "Google no autorizó el acceso. Acepta los permisos de lectura; comprueba los usuarios de prueba y las restricciones del administrador del centro.",
+                  invalid_client:
+                    "Google rechazó el Client ID. Comprueba que sea un cliente OAuth de aplicación web del proyecto correcto.",
+                  unauthorized_client:
+                    "Este cliente OAuth no está autorizado. Revisa el tipo de cliente y la configuración de consentimiento en Google Cloud.",
+                  invalid_scope:
+                    "Google rechazó los permisos solicitados. Revisa el consentimiento OAuth para Classroom y la identidad básica.",
+                  origin_mismatch:
+                    "El origen web no está autorizado para este Client ID. Añade https://filipireneusz23.github.io como origen JavaScript, sin /StudyFlow/.",
+                };
+                this.diagnostics.code = Object.hasOwn(messages, response.error)
+                  ? response.error
+                  : "oauth_error";
+                throw Error(
+                  messages[this.diagnostics.code] ||
+                    "Google devolvió un error de autorización. Revisa el consentimiento, los usuarios de prueba y las restricciones de tu cuenta.",
+                );
+              }
+              if (!this.diagnostics.tokenReceived) {
+                this.diagnostics.code = "missing_token";
+                throw Error(
+                  "Se recibió el callback de Google, pero no una autorización de acceso. Vuelve a conectar y acepta los permisos.",
+                );
+              }
               if (
                 !google.accounts.oauth2.hasGrantedAllScopes(
                   response,
                   ...SCOPES.slice(0, 2),
                 )
-              )
+              ) {
+                this.diagnostics.code = "insufficient_scope";
                 throw Error(
-                  "Permisos insuficientes: autoriza la lectura de tus clases y actividades.",
+                  "Permisos insuficientes: Google respondió, pero no concedió la lectura de clases y actividades. Vuelve a conectar y acepta ambos permisos.",
                 );
+              }
               if (
-                !response.access_token ||
                 !Number.isFinite(Number(response.expires_in)) ||
                 Number(response.expires_in) <= 30
               )
-                throw Error("Google no devolvió una autorización válida.");
+                throw Error(
+                  "Google devolvió una autorización caducada o sin duración válida. Vuelve a conectar.",
+                );
               this.#token = response.access_token;
               this.#expires =
                 this.now() + (Number(response.expires_in) - 30) * 1000;
@@ -343,9 +448,9 @@
                 "https://openidconnect.googleapis.com/v1/userinfo",
                 generation,
               );
-              if (!profile.sub)
+              if (!profile?.sub)
                 throw Error(
-                  "No se pudo identificar la cuenta de Google. Autoriza el acceso a la identidad básica.",
+                  "Google respondió, pero no se pudo identificar la cuenta. Autoriza openid y email y revisa las restricciones de tu organización.",
                 );
               if (generation !== this.#generation) return;
               if (this.cache.account?.sub !== profile.sub) {
@@ -356,10 +461,14 @@
                 ...this.cache,
                 account: { sub: profile.sub, email: profile.email || "" },
               };
-              clearTimeout(this.#expiryTimer);
+              this.#identityVerified = true;
+              this.diagnostics.identityVerified = true;
               this.#expiryTimer = setTimeout(
                 () => {
                   this.#token = null;
+                  this.#identityVerified = false;
+                  this.phase = "expired";
+                  this.progress = "La sesión de Google ha caducado.";
                   this.error =
                     "La autorización ha caducado. Vuelve a conectar para actualizar Classroom.";
                   this.emit();
@@ -370,43 +479,104 @@
               this.#lastAttempt = -Infinity;
               this.emit();
               await this.sync();
-            } catch (e) {
-              if (generation === this.#generation) {
-                this.#token = null;
-                this.#expires = 0;
-                this.busy = false;
-                this.fail(e);
-              }
+            } catch (error) {
+              failed(
+                error.message,
+                this.diagnostics.code || "connection_failed",
+              );
             }
           },
         });
+        // Keep this call in the click handler: GIS needs browser user activation.
         client.requestAccessToken({ prompt: "select_account" });
-      } catch (e) {
-        this.busy = false;
-        this.fail(e);
+      } catch {
+        failed(
+          "No se pudo iniciar la autorización de Google. Recarga el acceso de Google y vuelve a intentarlo.",
+          "oauth_start_failed",
+        );
       }
     }
+    cancelConnect() {
+      if (!["waiting", "identity"].includes(this.phase)) return;
+      ++this.#generation;
+      clearTimeout(this.#authTimer);
+      this.#token = null;
+      this.#expires = 0;
+      this.#identityVerified = false;
+      this.busy = false;
+      this.phase = "cancelled";
+      this.progress =
+        "Intento cancelado en StudyFlow. Puedes cerrar la ventana de Google y volver a conectar.";
+      this.error = "";
+      this.emit();
+    }
     async request(url, generation = this.#generation) {
+      const parsed = new URL(url);
+      const identity = parsed.hostname === "openidconnect.googleapis.com";
+      const step = identity
+        ? "identity"
+        : parsed.pathname.includes("studentSubmissions")
+          ? "submissions"
+          : parsed.pathname.includes("courseWork")
+            ? "coursework"
+            : "courses";
+      const labels = {
+        identity: "la identidad de tu cuenta de Google",
+        courses: "tus clases de Classroom",
+        coursework: "las actividades de Classroom",
+        submissions: "el estado de tus entregas de Classroom",
+      };
+      this.diagnostics.apiStep = step;
+      this.emit();
       for (let attempt = 0; attempt < 3; attempt++) {
         if (generation !== this.#generation)
           throw Error("La conexión ha cambiado.");
-        if (!this.connected)
+        if (!this.#token || this.now() >= this.#expires)
           throw Error(
             "La autorización ha caducado. Vuelve a conectar con Google Classroom.",
           );
-        const controller = new AbortController(),
-          timer = setTimeout(() => controller.abort(), 20000);
-        let response;
+        const controller = new AbortController();
+        let timer, response, body;
         try {
-          response = await this.fetch(url, {
-            headers: { Authorization: `Bearer ${this.#token}` },
-            signal: controller.signal,
-            cache: "no-store",
-            credentials: "omit",
-          });
-        } catch {
+          [response, body] = await Promise.race([
+            (async () => {
+              const result = await this.fetch(url, {
+                headers: { Authorization: `Bearer ${this.#token}` },
+                signal: controller.signal,
+                cache: "no-store",
+                credentials: "omit",
+              });
+              let data;
+              try {
+                data = await result.json();
+              } catch {
+                if (result.ok) throw Error("invalid_json");
+                data = null;
+              }
+              return [result, data];
+            })(),
+            new Promise((_, reject) => {
+              timer = setTimeout(() => {
+                controller.abort();
+                reject(Error("request_timeout"));
+              }, this.requestTimeoutMs);
+            }),
+          ]);
+        } catch (error) {
+          if (generation !== this.#generation)
+            throw Error("La conexión ha cambiado.");
+          const code = ["request_timeout", "invalid_json"].includes(
+            error.message,
+          )
+            ? error.message
+            : "network_error";
+          this.diagnostics.code = code;
           throw Error(
-            "No se pudo conectar con Google. Comprueba la red y vuelve a sincronizar.",
+            code === "request_timeout"
+              ? `Tiempo de espera agotado al consultar ${labels[step]}. Comprueba la conexión y vuelve a intentarlo.`
+              : code === "invalid_json"
+                ? `Google devolvió una respuesta no válida al consultar ${labels[step]}. Se conserva la copia anterior.`
+                : `No se pudo consultar ${labels[step]}. Comprueba la red, los bloqueadores y los permisos de acceso a Google.`,
           );
         } finally {
           clearTimeout(timer);
@@ -416,48 +586,97 @@
         if (response.status === 401) {
           this.#token = null;
           this.#expires = 0;
+          this.#identityVerified = false;
+          this.diagnostics.code = "HTTP_401";
           throw Error(
-            "La autorización ha caducado o ha sido revocada. Vuelve a conectar.",
+            "La autorización de Google ha caducado o ha sido revocada (HTTP 401). Vuelve a conectar.",
           );
         }
-        if (response.status === 403)
-          throw Error(
-            "Permisos insuficientes: habilita Classroom API, revisa los permisos OAuth y consulta al administrador de tu centro si bloquea aplicaciones externas.",
-          );
-        if (
-          (response.status === 429 ||
-            [500, 502, 503, 504].includes(response.status)) &&
-          attempt < 2
-        ) {
-          const header = response.headers.get("Retry-After");
-          const delay =
-            header === null
-              ? NaN
-              : /^\d+$/.test(header)
-                ? Number(header)
-                : (Date.parse(header) - this.now()) / 1000;
-          if (delay > 5)
+        if (!response.ok) {
+          const allowed = [
+            "SERVICE_DISABLED",
+            "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+            "PERMISSION_DENIED",
+            "accessNotConfigured",
+            "insufficientPermissions",
+            "domainPolicy",
+          ];
+          const candidates = [
+            ...(Array.isArray(body?.error?.details)
+              ? body.error.details
+              : []
+            ).map((d) => d?.reason),
+            ...(Array.isArray(body?.error?.errors)
+              ? body.error.errors
+              : []
+            ).map((e) => e?.reason),
+            body?.error?.status,
+          ];
+          const reason = candidates.find((r) => allowed.includes(r));
+          this.diagnostics.code = reason || `HTTP_${response.status}`;
+          if (response.status === 403) {
+            if (identity)
+              throw Error(
+                "Google devolvió una autorización, pero rechazó la consulta de identidad (HTTP 403). Comprueba los permisos openid y email y las restricciones de tu organización.",
+              );
+            if (["SERVICE_DISABLED", "accessNotConfigured"].includes(reason))
+              throw Error(
+                "Google Classroom API no está habilitada en el proyecto del Client ID (HTTP 403). Habilítala en Google Cloud y vuelve a sincronizar.",
+              );
+            if (
+              [
+                "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+                "insufficientPermissions",
+              ].includes(reason)
+            )
+              throw Error(
+                "Google Classroom rechazó la consulta por permisos OAuth insuficientes (HTTP 403). Vuelve a conectar y acepta los permisos de lectura de clases y actividades.",
+              );
             throw Error(
-              "Google pide esperar antes de volver a sincronizar. Se conserva la copia anterior.",
+              "Permisos insuficientes al consultar " +
+                labels[step] +
+                " (HTTP 403). Revisa Classroom API, el consentimiento OAuth y las restricciones del administrador del centro.",
             );
-          await this.sleep(
-            Math.min(
-              5000,
-              Math.max(
-                1000,
-                (Number.isFinite(delay) ? delay : 2 ** attempt) * 1000,
+          }
+          if (
+            (response.status === 429 ||
+              [500, 502, 503, 504].includes(response.status)) &&
+            attempt < 2
+          ) {
+            const header = response.headers.get("Retry-After");
+            const delay =
+              header === null
+                ? NaN
+                : /^\d+$/.test(header)
+                  ? Number(header)
+                  : (Date.parse(header) - this.now()) / 1000;
+            if (delay > 5)
+              throw Error(
+                "Google pide esperar antes de volver a sincronizar. Se conserva la copia anterior.",
+              );
+            await this.sleep(
+              Math.min(
+                5000,
+                Math.max(
+                  1000,
+                  (Number.isFinite(delay) ? delay : 2 ** attempt) * 1000,
+                ),
               ),
-            ),
-          );
-          continue;
-        }
-        if (!response.ok)
+            );
+            continue;
+          }
           throw Error(
             response.status === 429
               ? "Google ha limitado las solicitudes. Espera antes de volver a sincronizar."
-              : `Google Classroom no pudo completar la consulta (HTTP ${response.status}). Se conserva la copia anterior.`,
+              : `No se pudo consultar ${labels[step]} (HTTP ${response.status}). Se conserva la copia anterior.`,
           );
-        return response.json();
+        }
+        if (!body || typeof body !== "object")
+          throw Error(
+            `Google devolvió una respuesta vacía al consultar ${labels[step]}.`,
+          );
+        this.diagnostics.code = "";
+        return body;
       }
     }
     async list(path, field, params = {}, generation = this.#generation) {
@@ -502,6 +721,9 @@
       this.#lastAttempt = this.now();
       const generation = this.#generation;
       this.busy = true;
+      this.phase = "sync";
+      this.progress =
+        "Cuenta de Google verificada. Consultando clases y actividades…";
       this.error = "";
       this.emit();
       this.#inflight = (async () => {
@@ -572,9 +794,17 @@
             );
           }
           this.cache = next;
+          this.phase = "complete";
+          this.progress = `Sincronización correcta: ${courses.length} clases y ${tasks.length} actividades consultadas.`;
           return true;
         } catch (e) {
-          if (generation === this.#generation) this.fail(e);
+          if (generation === this.#generation) {
+            this.phase = "failed";
+            this.progress = this.connected
+              ? "Cuenta autorizada, pero la sincronización ha fallado. Se conserva la copia anterior."
+              : "La consulta falló. Vuelve a conectar con Google.";
+            this.fail(e);
+          }
           return false;
         } finally {
           if (generation === this.#generation) {
@@ -588,6 +818,17 @@
     }
     async disconnect() {
       const token = this.#token;
+      clearTimeout(this.#authTimer);
+      this.#identityVerified = false;
+      this.phase = "idle";
+      this.progress = "Desconectado de Classroom.";
+      this.diagnostics = {
+        callbackReceived: false,
+        tokenReceived: false,
+        identityVerified: false,
+        apiStep: "",
+        code: "",
+      };
       ++this.#generation;
       this.#token = null;
       this.#expires = 0;

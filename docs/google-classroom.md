@@ -97,3 +97,22 @@ Los tokens de acceso viven **solo en memoria**, con un margen de caducidad. No s
 Las pruebas automatizadas usan respuestas controladas de GIS y de la API para validar permisos, estados, caducidad, errores, paginación, duplicados, fechas, revocación y conservación de datos. **No equivalen a una autorización real de Google.** Esta implementación se entrega pendiente de que el propietario configure Google Cloud y autorice su cuenta real; no se ha realizado esa autorización durante el desarrollo.
 
 Referencias oficiales: [modelo de token de GIS](https://developers.google.com/identity/oauth2/web/guides/use-token-model), [permisos de Classroom](https://developers.google.com/classroom/guides/auth), [API Classroom](https://developers.google.com/classroom/reference/rest), [discovery de la API mantenido por Google](https://github.com/googleapis/google-api-go-client/blob/main/classroom/v1/classroom-api.json). Se contrastaron las rutas, permisos de lectura, paginación, comodín de entregas propias y fechas UTC con este último documento.
+
+## Diagnosticar una conexión que no termina
+
+Ajustes → Integraciones muestra el paso actual: espera de Google, comprobación de identidad y consulta de Classroom. Abre **Detalles de conexión (sin credenciales)** para comprobar, sin mostrar valores privados:
+
+- Si se recibió el callback de OAuth.
+- Si llegó un token de acceso (solo «sí/no»; nunca su valor).
+- Si se verificó la cuenta.
+- Qué consulta falló y su código seguro, por ejemplo `SERVICE_DISABLED`, `HTTP_401` o `oauth_timeout`.
+
+Si no llega ningún callback en 90 segundos, StudyFlow abandona la espera y permite reintentar. También puedes pulsar **Cancelar conexión**. Si cierras la ventana antes de completar el consentimiento, se muestra un error; si la ventana se cierra después de devolver la respuesta, no se cancela una comprobación que ya está en curso.
+
+Un callback con token no garantiza que la consulta posterior funcione: la identidad puede ser rechazada, la API puede estar deshabilitada o la organización puede denegar el acceso. Por eso el estado de autorización y el resultado de la sincronización se muestran por separado. Los fallos de red, respuestas no válidas y tiempos de espera no sobrescriben la copia anterior ni los datos personales.
+
+El aviso `Cross-Origin-Opener-Policy ... window.closed` por sí solo no prueba que OAuth haya fallado. StudyFlow no consulta `window.closed` ni reduce las protecciones del navegador para ocultar ese aviso. Comprueba primero si llegó el callback y en qué paso se produjo el error. El favicon se sirve desde la propia aplicación y no participa en OAuth.
+
+Para informar de un fallo basta con compartir el mensaje visible, el código y los indicadores sí/no. No compartas tokens, cabeceras Authorization ni respuestas completas de Google.
+
+Pruebas adicionales: `node --test tests/oauth.cjs` y `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/oauth-browser.cjs`. Reproducen eventos y respuestas controladas, incluida la falta de callback; no sustituyen una autorización real con una cuenta educativa.
