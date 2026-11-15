@@ -402,6 +402,28 @@
         this.emit();
       }
     }
+    isCourseVisible(courseId) {
+      const course = this.cache.courses.find((c) => c.id === courseId);
+      const hidden = Array.isArray(this.config.hiddenCourseIds)
+        ? this.config.hiddenCourseIds
+        : [];
+      return course?.courseState === "ACTIVE" && !hidden.includes(courseId);
+    }
+    setCourseVisibility(courseId, visible) {
+      if (this.corrupt) throw Error(this.error);
+      if (!this.cache.courses.some((c) => c.id === courseId))
+        throw Error("Clase no disponible.");
+      const hidden = new Set(
+        Array.isArray(this.config.hiddenCourseIds)
+          ? this.config.hiddenCourseIds
+          : [],
+      );
+      visible ? hidden.delete(courseId) : hidden.add(courseId);
+      const config = { ...this.config, hiddenCourseIds: [...hidden] };
+      this.storage.setItem(CONFIG_KEY, JSON.stringify(config));
+      this.config = config;
+      this.emit();
+    }
     setMapping(courseId, subjectId) {
       if (this.corrupt) throw Error(this.error);
       if (!this.cache.courses.some((c) => String(c.id) === courseId))

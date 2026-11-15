@@ -44,3 +44,9 @@ Si Google no permite un scope compatible con actividades completas, la alternati
 ## Límites de la comprobación
 
 Los tests comprueban la elección de endpoints y scopes, los estados, la caché, la ausencia de fechas inventadas y la conservación de los datos. Las respuestas de Google en las pruebas están controladas: no se ha autorizado una cuenta educativa real ni se ha comprobado la política privada del centro. El modo limitado usa un contrato oficial compatible con los scopes comunicados por el usuario; la autorización real sigue sujeta a Google y a su organización.
+
+## Clases de cursos anteriores
+
+Las clases archivadas y sus actividades se conservan, pero se ocultan en las vistas habituales, contadores y calendario. En Ajustes → Integraciones → Clases que aparecen en StudyFlow puedes desmarcar clases antiguas que Google aún considere activas; puedes volver a marcarlas sin perder datos. Las archivadas permanecen en un apartado desplegable de consulta. Estas preferencias afectan solo a StudyFlow.
+
+El panel «Próximas entregas» incluye únicamente tareas con fecha conocida. Las entregas propias sin metadatos se muestran en «Actividades de Classroom», con la limitación de acceso visible; no se convierten en fechas o títulos supuestos.
