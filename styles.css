@@ -875,3 +875,134 @@ button:disabled {
 .integration-card {
   overflow-wrap: anywhere;
 }
+.classroom-cache-notice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border: 1px solid #3d465b;
+  border-radius: 12px;
+  background: #1a2330;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+.classroom-cache-notice p {
+  color: #aebbd0;
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.tt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: 18px 0;
+}
+.tt-toolbar label {
+  min-width: 135px;
+  flex: 1;
+}
+.tt-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 24px 0;
+}
+.tt-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 740px;
+  table-layout: fixed;
+}
+.tt-table th {
+  background: #242735;
+  color: #c5cddd;
+  font-size: 12px;
+  padding: 14px 8px;
+  border: 1px solid #363c4d;
+  width: 16%;
+}
+.tt-table th:first-child {
+  width: 90px;
+}
+.tt-table th small {
+  display: block;
+  color: #8794aa;
+  margin-top: 6px;
+  font-size: 10px;
+}
+.tt-table td {
+  border: 1px solid #363c4d;
+  min-height: 65px;
+  height: 65px;
+  padding: 5px;
+}
+.tt-table .tt-day-today {
+  background: #40305f;
+  color: #fff;
+}
+.tt-cell {
+  background: color-mix(in srgb, var(--block-color) 18%, #181c26);
+  border-left: 4px solid var(--block-color) !important;
+}
+.tt-cell button {
+  background: transparent;
+  color: #e6edf7;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 7px;
+  padding: 12px 7px;
+  text-align: left;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.tt-cell button span {
+  font-size: 10px;
+  color: #b6c3d8;
+}
+.tt-cell.break {
+  background: #24372f;
+  border-left-color: #80c49f !important;
+}
+.tt-cell.free {
+  background: #252b36;
+  border-left-style: dashed !important;
+}
+.tt-current {
+  outline: 2px solid #bca6ff;
+  outline-offset: -3px;
+}
+.tt-today {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 5px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.tt-today span {
+  font-size: 11px;
+  color: #aab8cd;
+}
+#ttSubjectLabel button {
+  margin-top: 10px;
+  font-size: 11px;
+  padding: 7px 10px;
+}
+@media (max-width: 700px) {
+  .classroom-cache-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .tt-toolbar {
+    align-items: stretch;
+  }
+  .tt-toolbar button {
+    font-size: 11px;
+  }
+  .tt-today {
+    flex-wrap: wrap;
+  }
+}

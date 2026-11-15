@@ -436,7 +436,7 @@
       this.config = config;
       this.emit();
     }
-    connect() {
+    connect({ restore = false } = {}) {
       if (!this.config.clientId) {
         this.fail(Error("Configura primero el Client ID de Google Cloud."));
         return;
@@ -499,6 +499,9 @@
       try {
         const client = google.accounts.oauth2.initTokenClient({
           client_id: this.config.clientId,
+          ...(restore && this.cache.account?.email
+            ? { hint: this.cache.account.email }
+            : {}),
           scope: this.scopes.join(" "),
           include_granted_scopes: false, // Limit this token request to the four requested permissions.
           error_callback: (error) => {
@@ -654,7 +657,9 @@
           },
         });
         // Keep this call in the click handler: GIS needs browser user activation.
-        client.requestAccessToken({ prompt: "consent select_account" });
+        client.requestAccessToken({
+          prompt: restore ? "" : "consent select_account",
+        });
       } catch {
         failed(
           "No se pudo iniciar la autorización de Google. Recarga el acceso de Google y vuelve a intentarlo.",

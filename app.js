@@ -53,6 +53,7 @@ function normalize(raw) {
         !validDate(item[date])
       )
         throw Error("Hay registros con nombre, asignatura o fecha no válidos");
+  if (raw.timetable !== undefined) Timetable.validate(raw.timetable);
   const s = structuredClone(raw);
   s.tasks = s.tasks.map((t) => ({
     ...t,
@@ -126,15 +127,21 @@ const mutate = (fn) => {
   return commit(next);
 };
 const view = () =>
-  ["dashboard", "tasks", "calendar", "subjects", "settings"].includes(
-    location.hash.slice(1),
-  )
+  [
+    "dashboard",
+    "tasks",
+    "calendar",
+    "timetable",
+    "subjects",
+    "settings",
+  ].includes(location.hash.slice(1))
     ? location.hash.slice(1)
     : "dashboard";
 const titles = {
   dashboard: "Panel principal",
   tasks: "Mis tareas",
   calendar: "Calendario",
+  timetable: "Horario",
   subjects: "Asignaturas",
   settings: "Ajustes",
 };
@@ -176,7 +183,7 @@ function taskRows(tasks) {
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${t.done ? "done" : ""}">${t.origin === "classroom" ? '<span class="classroom-mark" title="Solo lectura">▣</span>' : `<input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}>`}<div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span>${t.origin === "classroom" ? `<span class="tag classroom-tag">Google Classroom${classroom.connected ? "" : " · copia local"}</span><span>${esc(statusLabels[t.status] || t.status)}</span>${!activeTask(t) ? '<span class="tag">Oculta / archivada / no disponible</span>' : ""}` : `<span class="tag priority-${t.priority}">${priorities[t.priority]}</span>`}</div></div><div class="row-actions">${t.origin === "classroom" ? `<button data-classroom="${esc(t.id)}">Ver detalles</button>${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir Classroom ↗</a>` : ""}` : `<button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button>`}</div></div>`,
+            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}">${t.origin === "classroom" ? '<span class="classroom-mark" title="Solo lectura">▣</span>' : `<input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}>`}<div class="item-body"><div class="item-title">${esc(t.limited ? "Actividad sin título disponible" : t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span>${t.origin === "classroom" ? `<span class="tag classroom-tag">Google Classroom${classroom.connected ? "" : " · copia local"}</span><span>${esc(statusLabels[t.status] || t.status)}</span>${!activeTask(t) ? '<span class="tag">Oculta / archivada / no disponible</span>' : ""}` : `<span class="tag priority-${t.priority}">${priorities[t.priority]}</span>`}</div></div><div class="row-actions">${t.origin === "classroom" ? `<button data-classroom="${esc(t.id)}">Ver detalles</button>${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir Classroom ↗</a>` : ""}` : `<button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button>`}</div></div>`,
         )
         .join("")
     : '<div class="empty">No hay tareas en esta vista.</div>';
@@ -260,7 +267,7 @@ function dashboard() {
       orderedTasks()
         .filter((t) => t.origin === "classroom" && activeTask(t) && !t.done)
         .slice(0, 3),
-    )}<a class="text-link" href="#settings">Gestionar integración →</a></section><section class="card focus-card"><span class="eyebrow">PASO A PASO</span><h2 style="margin-top:12px">Lo estás construyendo.</h2><p>No necesitas hacerlo todo hoy. Empieza por una tarea y celebra cada avance.</p><div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div><div class="stat-note">${percent}% completado · ${done} de ${done + pending.length} tareas</div></section></div></div>`
+    )}<a class="text-link" href="#settings">Gestionar integración →</a></section><section class="card focus-card"><span class="eyebrow">PASO A PASO</span><h2 style="margin-top:12px">Lo estás construyendo.</h2><p>No necesitas hacerlo todo hoy. Empieza por una tarea y celebra cada avance.</p><div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div><div class="stat-note">${percent}% completado · ${done} de ${done + pending.length} tareas</div></section>${timetableDashboard()}</div></div>`
   );
 }
 function tasksView() {
@@ -364,10 +371,12 @@ function render() {
   ).length;
   $("main").innerHTML =
     (storageBlocked ? `<p role="alert" class="card">${loadError}</p>` : "") +
+    classroomCacheNotice() +
     {
       dashboard,
       tasks: tasksView,
       calendar: calendarView,
+      timetable: timetableView,
       subjects: subjectsView,
       settings: settingsView,
     }[v]();
@@ -492,6 +501,7 @@ document.addEventListener("click", (e) => {
   if (d.edit) openEditor(d.kind, d.edit);
   if (d.classroom) openClassroomTask(d.classroom);
   if (d.action === "classroom-connect") classroom.connect();
+  if (d.action === "classroom-restore") classroom.connect({ restore: true });
   if (d.action === "classroom-cancel") classroom.cancelConnect();
   if (d.action === "classroom-sync") classroom.sync();
   if (d.action === "classroom-disconnect") classroom.disconnect();
@@ -529,6 +539,18 @@ document.addEventListener("click", (e) => {
   if (d.action === "import") $("importFile").click();
   if (d.subjectDelete) {
     const s = state.subjects.find((s) => String(s.id) === d.subjectDelete);
+    if (
+      Timetable.get(state).schedules.some((schedule) =>
+        schedule.blocks.some(
+          (b) => b.type === "class" && b.subjectId === String(s.id),
+        ),
+      )
+    ) {
+      notify(
+        "Esta asignatura está en un horario. Reasigna esos bloques antes de eliminarla.",
+      );
+      return;
+    }
     if (
       state.tasks.some((t) => t.subject === s.name) ||
       state.exams.some((t) => t.subject === s.name)
@@ -618,6 +640,8 @@ document.addEventListener("change", async (e) => {
       if (file.size > 5 * 1024 * 1024)
         throw Error("El archivo supera los 5 MB");
       const next = normalize(JSON.parse(await file.text()));
+      if (!Object.hasOwn(next, "timetable") && state.timetable)
+        next.timetable = structuredClone(state.timetable);
       if (
         !confirm(
           `¿Importar ${next.tasks.length} tareas y ${next.exams.length} exámenes? Se reemplazarán los datos actuales.`,
@@ -742,9 +766,11 @@ function classroomSubjects() {
 function openClassroomTask(id) {
   const t = allTasks().find((t) => t.origin === "classroom" && t.id === id);
   if (!t) return;
-  $("classroomTaskTitle").textContent = t.name;
+  $("classroomTaskTitle").textContent = t.limited
+    ? "Actividad sin título disponible"
+    : t.name;
   $("classroomTaskBody").innerHTML =
-    `<p><span class="tag classroom-tag">Google Classroom · solo lectura</span></p><p>${esc(t.subject)} · ${taskDate(t)}</p><p>${esc(statusLabels[t.status] || t.status)}${!activeTask(t) ? " · Oculta / archivada / no disponible en la última consulta" : ""}</p><p class="task-description">${esc(t.description || "Sin descripción.")}</p>${t.limited ? '<p class="calendar-warning">Datos limitados: el identificador mostrado no es el título original. No se conoce la fecha de entrega con este acceso.</p>' : ""}${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir actividad original en Classroom ↗</a>` : ""}<p class="muted">${classroom.connected ? "Los cambios se consultan al sincronizar." : "Copia local: vuelve a conectar para actualizar."}</p>`;
+    `<p><span class="tag classroom-tag">Google Classroom · solo lectura</span></p><p>${esc(t.subject)} · ${taskDate(t)}</p><p>${esc(statusLabels[t.status] || t.status)}${!activeTask(t) ? " · Oculta / archivada / no disponible en la última consulta" : ""}</p><p class="task-description">${esc(t.description || "Sin descripción.")}</p>${t.limited ? `<p class="muted">Referencia de la actividad: ${esc(t.workId || t.id)}</p>` : ""}${t.limited ? '<p class="calendar-warning">Datos limitados: el identificador mostrado no es el título original. No se conoce la fecha de entrega con este acceso.</p>' : ""}${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir actividad original en Classroom ↗</a>` : ""}<p class="muted">${classroom.connected ? "Los cambios se consultan al sincronizar." : "Copia local: vuelve a conectar para actualizar."}</p>`;
   $("classroomDetails").showModal();
 }
 
@@ -757,4 +783,15 @@ function classroomCourseControls() {
   );
   if (!active.length && !archived.length) return "";
   return `<h3>Clases que aparecen en StudyFlow</h3><p>Las archivadas se ocultan automáticamente. Si una clase de otro año sigue activa en Google, desmárcala aquí. No se borran sus datos ni se modifica Classroom.</p><div class="course-mappings">${active.map((c) => `<div><label class="toggle"><input type="checkbox" data-classroom-visible="${esc(c.id)}" ${classroom.isCourseVisible(c.id) ? "checked" : ""}>${esc(c.name)}</label><label>Relacionar con asignatura personal<select data-classroom-map="${esc(c.id)}"><option value="">Automático por nombre / independiente</option>${state.subjects.map((s) => `<option value="${esc(s.id)}" ${classroom.config.mapping[c.id] === String(s.id) ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label></div>`).join("")}</div>${archived.length ? `<details><summary>Clases archivadas (${archived.length})</summary><p>Conservadas para consulta; no aparecen en las vistas habituales.</p><ul>${archived.map((c) => `<li>${esc(c.name)}</li>`).join("")}</ul></details>` : ""}`;
+}
+
+function classroomCacheNotice() {
+  if (!classroom.cache.lastSync) return "";
+  const fresh =
+    classroom.connected && classroom.phase === "complete" && !classroom.error;
+  const date = new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(classroom.cache.lastSync));
+  return `<section class="classroom-cache-notice" aria-label="Estado de datos de Classroom"><div><strong>${fresh ? "Datos de Classroom sincronizados" : "Copia guardada de Classroom"}</strong><p>Última sincronización correcta: ${esc(date)}${classroom.cache.account?.email ? " · " + esc(classroom.cache.account.email) : ""}. ${fresh ? "Se actualizan periódicamente mientras la autorización sea válida." : classroom.connected ? "Se muestra la última copia guardada mientras se actualizan los datos o se resuelve el error de sincronización." : "Los datos están disponibles; vuelve a autorizar para buscar cambios."}</p></div>${!classroom.connected ? `<button class="secondary" data-action="classroom-restore" ${!classroom.ready || classroom.busy ? "disabled" : ""}>${classroom.loading ? "Cargando Google…" : "Volver a autorizar Google"}</button>` : ""}</section>`;
 }

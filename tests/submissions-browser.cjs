@@ -95,7 +95,7 @@ const assert = require("node:assert/strict");
     await page.locator("#taskOrigin").selectOption("classroom");
     assert.equal(
       await page
-        .getByText("Entrega propia · actividad w", { exact: true })
+        .getByText("Actividad sin título disponible", { exact: true })
         .count(),
       1,
     );
@@ -108,7 +108,7 @@ const assert = require("node:assert/strict");
     await page.getByRole("button", { name: "Vencidas", exact: true }).click();
     assert.equal(
       await page
-        .getByText("Entrega propia · actividad w", { exact: true })
+        .getByText("Actividad sin título disponible", { exact: true })
         .count(),
       1,
     );

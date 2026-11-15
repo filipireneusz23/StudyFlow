@@ -65,7 +65,7 @@ const assert = require("node:assert/strict");
     );
     await page.reload();
     assert.equal(
-      await page.getByText("Entrega archive", { exact: true }).count(),
+      await page.locator('[data-task-id="classroom:archive:w"]').count(),
       0,
     );
     const upcoming = page
@@ -78,7 +78,7 @@ const assert = require("node:assert/strict");
       })
       .first();
     assert.equal(
-      await upcoming.getByText("Entrega current", { exact: true }).count(),
+      await upcoming.locator('[data-task-id="classroom:current:w"]').count(),
       0,
     );
     assert.equal(
@@ -103,11 +103,11 @@ const assert = require("node:assert/strict");
       .getByRole("heading", { name: "Actividades de Classroom", exact: true })
       .waitFor();
     assert.equal(
-      await page.getByText("Entrega old", { exact: true }).count(),
+      await page.locator('[data-task-id="classroom:old:w"]').count(),
       0,
     );
     assert.equal(
-      await page.getByText("Entrega current", { exact: true }).count(),
+      await page.locator('[data-task-id="classroom:current:w"]').count(),
       1,
     );
     assert.deepEqual(
@@ -131,7 +131,7 @@ const assert = require("node:assert/strict");
     );
     await page.reload();
     assert.equal(
-      await page.getByText("Entrega old", { exact: true }).count(),
+      await page.locator('[data-task-id="classroom:old:w"]').count(),
       0,
     );
     assert.deepEqual(errors, []);

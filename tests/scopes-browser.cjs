@@ -27,6 +27,8 @@ const { SCOPES } = require("../classroom.js");
             "app.js",
             "classroom.js",
             "academic-calendar.js",
+            "timetable.js",
+            "timetable-ui.js",
             "styles.css",
             "favicon.svg",
           ].includes(file)

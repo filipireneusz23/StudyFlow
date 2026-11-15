@@ -68,3 +68,7 @@ La conexión usa por defecto el **modo de entregas propias**, compatible con `cl
 node --test tests/submissions.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/submissions-browser.cjs
 ```
+
+## Horario y caché de Classroom
+
+La sección **Horario** permite crear perfiles semanales vacíos, añadir clases/recreos/horas libres, copiar días y utilizar asignaturas personales o importadas. Se integra con el dashboard y los días no lectivos oficiales y se incluye en las copias JSON. Classroom muestra la copia guardada inmediatamente y permite volver a autorizar sin almacenar tokens. [Uso, persistencia y límites](docs/horario.md).
