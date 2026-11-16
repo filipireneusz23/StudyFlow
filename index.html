@@ -4,11 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#101218" />
-    <title>StudyFlow · 3.0</title>
+    <title>StudyFlow · 4.0</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="stylesheet" href="styles.css" />
     <script src="academic-calendar.js" defer></script>
-    <script src="classroom.js" defer></script>
+    <script src="v4-core.js" defer></script>
+    <script src="v4-ui.js" defer></script>
     <script src="timetable.js" defer></script>
     <script src="timetable-ui.js" defer></script>
     <script src="app.js" defer></script>
@@ -16,7 +17,7 @@
   <body>
     <aside id="sidebar">
       <a class="brand" href="#dashboard"
-        ><span class="logo">S</span> StudyFlow <small>3.0</small></a
+        ><span class="logo">S</span> StudyFlow <small>4.0</small></a
       >
       <p class="nav-label">TU ESPACIO DE ESTUDIO</p>
       <nav aria-label="Principal">
@@ -25,6 +26,12 @@
         ><a href="#calendar" data-view="calendar">▦ Calendario</a
         ><a href="#timetable" data-view="timetable">◷ Horario</a
         ><a href="#subjects" data-view="subjects">▤ Asignaturas</a
+        ><a href="#grades" data-view="grades">◎ Notas</a
+        ><a href="#study" data-view="study">◉ Estudio</a
+        ><a href="#stats" data-view="stats">▥ Estadísticas</a
+        ><a href="#notes" data-view="notes">▤ Apuntes</a
+        ><a href="#practice" data-view="practice">◇ Prácticas de FP</a
+        ><a href="#reminders" data-view="reminders">♧ Recordatorios</a
         ><a href="#settings" data-view="settings">⚙ Ajustes</a>
       </nav>
       <div class="sidebar-bottom">
@@ -45,7 +52,7 @@
         ><span class="header-right">✦ Un paso más cerca de tus metas</span>
       </header>
       <main id="main"></main>
-      <footer>StudyFlow 3.0 <span>Organiza. Avanza. Consíguelo.</span></footer>
+      <footer>StudyFlow 4.0 <span>Organiza. Avanza. Consíguelo.</span></footer>
     </div>
     <dialog id="editor">
       <form id="itemForm">
@@ -99,20 +106,6 @@
         <button id="dayTask">＋ Nueva tarea</button
         ><button id="dayExam" class="secondary">＋ Examen</button>
       </div>
-    </dialog>
-    <dialog id="classroomDetails" aria-labelledby="classroomTaskTitle">
-      <div class="section-head">
-        <h2 id="classroomTaskTitle"></h2>
-        <button
-          id="closeClassroomDetails"
-          type="button"
-          class="secondary"
-          aria-label="Cerrar actividad"
-        >
-          ×
-        </button>
-      </div>
-      <div id="classroomTaskBody"></div>
     </dialog>
     <dialog id="ttDialog" aria-labelledby="ttTitle">
       <form id="ttForm">

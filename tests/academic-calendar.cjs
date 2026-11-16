@@ -15,7 +15,7 @@ const assert = require("node:assert/strict");
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("http://127.0.0.1:8000");
     const saved = {
-      version: 3,
+      version: 4,
       tasks: [
         {
           id: "t",

@@ -41,17 +41,6 @@ const assert = require("node:assert/strict");
       (s) => localStorage.setItem("studyflow-v1", JSON.stringify(s)),
       original,
     );
-    await page.evaluate(() =>
-      localStorage.setItem(
-        "studyflow-classroom-cache",
-        JSON.stringify({
-          account: null,
-          lastSync: null,
-          courses: [{ id: "c", name: "Programación", courseState: "ACTIVE" }],
-          tasks: [],
-        }),
-      ),
-    );
     await page.reload();
     assert.match(await page.locator("main").innerText(), /horario está vacío/);
     assert.equal(
@@ -93,7 +82,10 @@ const assert = require("node:assert/strict");
     assert.equal(await page.locator(".tt-cell").count(), 4);
     await page.getByRole("button", { name: "＋ Nuevo bloque" }).click();
     await form.locator("[name=day]").selectOption("3");
-    await form.locator("[name=subject]").selectOption("gc:c");
+    page.once("dialog", (d) => d.accept("Programación"));
+    await page
+      .getByRole("button", { name: "Crear asignatura", exact: true })
+      .click();
     await form.locator("[name=start]").fill("08:30");
     await form.locator("[name=end]").fill("09:30");
     await page
@@ -104,7 +96,7 @@ const assert = require("node:assert/strict");
     const saved = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("studyflow-v1")),
     );
-    for (const key of ["tasks", "exams", "subjects", "settings"])
+    for (const key of ["tasks", "exams", "settings"])
       assert.deepEqual(saved[key], original[key]);
     page.once("dialog", (d) => d.accept("Semana B"));
     await page
@@ -181,13 +173,11 @@ const assert = require("node:assert/strict");
       exported.timetable,
     );
     page.once("dialog", (d) => d.accept());
-    await page
-      .locator("#importFile")
-      .setInputFiles({
-        name: "copia-antigua.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(original)),
-      });
+    await page.locator("#importFile").setInputFiles({
+      name: "copia-antigua.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(original)),
+    });
     await page
       .getByRole("status")
       .filter({ hasText: "Copia importada correctamente." })

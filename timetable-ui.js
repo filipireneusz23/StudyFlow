@@ -1,18 +1,11 @@
 /* UI uses the existing personal-state save/export path. */
 const TT_DAYS = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 function ttSubjects() {
-  return [
-    ...state.subjects.map((s) => ({
-      id: String(s.id),
-      name: s.name,
-      color: s.color,
-    })),
-    ...classroom.cache.courses
-      .filter(
-        (c) => classroom.isCourseVisible(c.id) && !classroomManualSubject(c.id),
-      )
-      .map((c) => ({ id: "gc:" + c.id, name: c.name, color: "#86b7ef" })),
-  ];
+  return state.subjects.map((s) => ({
+    id: String(s.id),
+    name: s.name,
+    color: s.color,
+  }));
 }
 function ttName(block) {
   return block.type === "break"
@@ -40,7 +33,7 @@ function ttNext(info) {
 }
 function timetableDashboard() {
   const info = ttStatus();
-  return `<section class="card timetable-summary"><div class="section-head"><h2>Horario de hoy</h2><a class="text-link" href="#timetable">Ver horario →</a></div><p>${info.off ? "Hoy no hay clases" : info.current ? `Ahora: <strong>${esc(ttName(info.current))}</strong> · ${info.current.start}–${info.current.end}` : "No hay ningún bloque en curso."}</p>${!info.off ? info.blocks.map((b) => `<div class="tt-today ${info.current?.id === b.id ? "tt-current" : ""}"><span>${b.start}–${b.end}</span><strong>${esc(ttName(b))}</strong></div>`).join("") || '<p class="muted">Tu horario está vacío. Configúralo para ver tus clases.</p>' : ""}<p class="muted">Próxima clase: ${ttNext(info)}</p></section>`;
+  return `<section class="card timetable-summary"><div class="section-head"><h2>Horario de hoy</h2><a class="text-link" href="#timetable">Ver horario →</a></div><p>${info.off ? "Hoy no hay clases" : info.current ? `Ahora: <strong>${esc(ttName(info.current))}</strong> · ${info.current.start}–${info.current.end}` : "No hay ningún bloque en curso."}</p>${!info.off ? info.blocks.map((b) => `<div class="tt-today ${info.current?.id === b.id ? "tt-current" : ""}"><span>${b.start}–${b.end}</span><strong>${esc(ttName(b))}</strong></div>`).join("") || '<p class="muted">Tu horario está vacío. Configúralo para ver tus clases.</p>' : ""}<p class="muted">Próxima clase: ${ttNext(info)}</p>${practiceTimetableSummary()}</section>`;
 }
 function timetableView() {
   const table = Timetable.get(state),
@@ -75,7 +68,7 @@ function timetableView() {
       "Configura tu horario. No se añaden clases automáticamente.",
       '<button data-tt-action="new-block">＋ Nuevo bloque</button>',
     ) +
-    `<section class="card"><div class="tt-toolbar"><label>Horario activo<select id="ttSchedule">${table.schedules.map((s) => `<option value="${esc(s.id)}" ${s.id === table.activeId ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label><button class="secondary" data-tt-action="new-profile">Nuevo horario</button><button class="secondary" data-tt-action="rename-profile">Renombrar</button><button class="secondary" data-tt-action="delete-profile" ${table.schedules.length === 1 ? "disabled" : ""}>Eliminar horario</button></div><p>${info.off ? "Hoy no hay clases" : info.current ? `En curso: ${esc(ttName(info.current))}` : "No hay ningún bloque en curso."}</p><p class="muted">Próxima clase: ${ttNext(info)}</p>${
+    `<section class="card"><div class="tt-toolbar"><label>Horario activo<select id="ttSchedule">${table.schedules.map((s) => `<option value="${esc(s.id)}" ${s.id === table.activeId ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label><button class="secondary" data-tt-action="new-profile">Nuevo horario</button><button class="secondary" data-tt-action="rename-profile">Renombrar</button><button class="secondary" data-tt-action="delete-profile" ${table.schedules.length === 1 ? "disabled" : ""}>Eliminar horario</button></div><p>${info.off ? "Hoy no hay clases" : info.current ? `En curso: ${esc(ttName(info.current))}` : "No hay ningún bloque en curso."}</p><p class="muted">Próxima clase: ${ttNext(info)}</p>${practiceTimetableSummary()}${
       bounds.length
         ? `<div class="tt-scroll" tabindex="0" aria-label="Horario semanal: desplaza horizontalmente en móvil"><table class="tt-table"><thead><tr><th>Hora</th>${TT_DAYS.slice(
             1,

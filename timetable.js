@@ -1,4 +1,4 @@
-/* Personal weekly schedules; never inferred from Classroom or the school calendar. */
+/* Personal weekly schedules; never inferred from external services or the school calendar. */
 (function (root) {
   "use strict";
   const minutes = (time) => {

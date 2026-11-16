@@ -50,7 +50,9 @@ function normalize(raw) {
         !item ||
         typeof item.name !== "string" ||
         typeof item.subject !== "string" ||
-        !validDate(item[date])
+        (date === "due"
+          ? Boolean(item[date]) && !validDate(item[date])
+          : !validDate(item[date]))
       )
         throw Error("Hay registros con nombre, asignatura o fecha no válidos");
   if (raw.timetable !== undefined) Timetable.validate(raw.timetable);
@@ -74,7 +76,8 @@ function normalize(raw) {
     if (!s.subjects.some((x) => x.name === item.subject))
       s.subjects.push({ id: uid(), name: item.subject, color: "#b4a3ff" });
   s.settings = { name: "", ...(s.settings || {}) };
-  s.version = 3;
+  s.version = 4;
+  V4.validate(s);
   return s;
 }
 let state,
@@ -82,8 +85,49 @@ let state,
   loadError = "";
 try {
   const raw = localStorage.getItem(KEY);
-  state = normalize(raw ? JSON.parse(raw) : { tasks: [], exams: [] });
-  if (raw && JSON.parse(raw).version !== 3 && !localStorage.getItem(BACKUP))
+  const original = raw ? JSON.parse(raw) : { tasks: [], exams: [] };
+  state = normalize(original);
+  if (original.version !== 4) {
+    let externalRaw = localStorage.getItem("studyflow-classroom-cache");
+    if (!externalRaw) {
+      try {
+        externalRaw =
+          JSON.parse(
+            localStorage.getItem("studyflow-backup-before-v4") || "null",
+          )?.imported || null;
+      } catch {}
+    }
+    let external = null;
+    try {
+      external = externalRaw ? JSON.parse(externalRaw) : null;
+    } catch {
+      /* retain unreadable data in the migration backup */
+    }
+    if (
+      (raw || externalRaw) &&
+      !localStorage.getItem("studyflow-backup-before-v4")
+    )
+      localStorage.setItem(
+        "studyflow-backup-before-v4",
+        JSON.stringify({ personal: raw, imported: externalRaw }),
+      );
+    state = V4.migrate(state, external);
+    V4.validate(state);
+    if (externalRaw && localStorage.getItem("studyflow-backup-before-v4")) {
+      localStorage.removeItem("studyflow-classroom-cache");
+      localStorage.removeItem("studyflow-classroom-config");
+    }
+    localStorage.setItem(KEY, JSON.stringify(state));
+    try {
+      localStorage.removeItem("studyflow-classroom-config");
+      localStorage.removeItem("studyflow-classroom-cache");
+    } catch {}
+  }
+  if (
+    raw &&
+    (JSON.parse(raw).version ?? 1) < 3 &&
+    !localStorage.getItem(BACKUP)
+  )
     localStorage.setItem(BACKUP, raw);
 } catch (e) {
   storageBlocked = true;
@@ -91,9 +135,7 @@ try {
     "No se han modificado tus datos originales. Exporta el archivo original desde Ajustes antes de recuperarlo.";
   state = normalize({ tasks: [], exams: [] });
 }
-const classroom = new Classroom.ClassroomClient();
-let originFilter = "all",
-  subjectFilter = "all";
+let subjectFilter = "all";
 let filter = "pending",
   month = new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   editing = null,
@@ -104,15 +146,22 @@ function notify(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ($("toast").style.display = "none"), 5000);
 }
-function commit(next) {
+function commit(next, redraw = true) {
   if (storageBlocked) {
     notify(loadError);
     return false;
   }
   try {
+    V4.validate(next);
+    if (next.timetable) Timetable.validate(next.timetable);
+  } catch (error) {
+    notify(error.message);
+    return false;
+  }
+  try {
     localStorage.setItem(KEY, JSON.stringify(next));
     state = next;
-    render();
+    if (redraw) render();
     return true;
   } catch {
     notify(
@@ -134,6 +183,12 @@ const view = () =>
     "timetable",
     "subjects",
     "settings",
+    "grades",
+    "study",
+    "stats",
+    "notes",
+    "practice",
+    "reminders",
   ].includes(location.hash.slice(1))
     ? location.hash.slice(1)
     : "dashboard";
@@ -144,6 +199,12 @@ const titles = {
   timetable: "Horario",
   subjects: "Asignaturas",
   settings: "Ajustes",
+  grades: "Notas",
+  study: "Estudio",
+  stats: "Estadísticas",
+  notes: "Apuntes",
+  practice: "Prácticas de FP",
+  reminders: "Recordatorios",
 };
 function head(title, sub, actions = "") {
   return `<div class="page-head"><div><span class="eyebrow">TU APRENDIZAJE, EN ORDEN</span><h1>${title}</h1><div class="subtitle">${sub}</div></div><div class="actions">${actions}</div></div>`;
@@ -151,62 +212,43 @@ function head(title, sub, actions = "") {
 const addButtons = () =>
   '<button class="secondary" data-action="new-exam">＋ Examen</button><button data-action="new-task">＋ Nueva tarea</button>';
 function allTasks() {
-  return [
-    ...state.tasks,
-    ...classroom.cache.tasks.map((t) => ({
-      ...t,
-      due: t.dueAt ? localDate(new Date(t.dueAt)) : t.due,
-      subject: classroomSubject(t.courseId, t.courseName),
-      priority: "medium",
-    })),
-  ];
+  return state.tasks;
 }
-const activeTask = (t) =>
-  t.origin !== "classroom" ||
-  (t.availability === "active" && classroom.isCourseVisible(t.courseId));
-const overdue = (t) =>
-  !t.done &&
-  (t.limited
-    ? t.late === true
-    : Boolean(t.due) &&
-      (t.dueAt ? new Date(t.dueAt).getTime() < Date.now() : t.due < today()));
-const statusLabels = {
-  NEW: "Asignada",
-  CREATED: "Pendiente",
-  TURNED_IN: "Entregada",
-  RETURNED: "Devuelta",
-  RECLAIMED_BY_STUDENT: "Retirada por el alumno",
-  UNKNOWN: "Estado no disponible",
-};
+const activeTask = () => true;
+const overdue = (t) => !t.done && Boolean(t.due) && t.due < today();
+function taskDate(t) {
+  return t.due ? esc(formatDate(t.due)) : "Sin fecha";
+}
 function taskRows(tasks) {
   return tasks.length
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}">${t.origin === "classroom" ? '<span class="classroom-mark" title="Solo lectura">▣</span>' : `<input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}>`}<div class="item-body"><div class="item-title">${esc(t.limited ? "Actividad sin título disponible" : t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span>${t.origin === "classroom" ? `<span class="tag classroom-tag">Google Classroom${classroom.connected ? "" : " · copia local"}</span><span>${esc(statusLabels[t.status] || t.status)}</span>${!activeTask(t) ? '<span class="tag">Oculta / archivada / no disponible</span>' : ""}` : `<span class="tag priority-${t.priority}">${priorities[t.priority]}</span>`}</div></div><div class="row-actions">${t.origin === "classroom" ? `<button data-classroom="${esc(t.id)}">Ver detalles</button>${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir Classroom ↗</a>` : ""}` : `<button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button>`}</div></div>`,
+            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}"><input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}><div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span><span class="tag priority-${t.priority}">${priorities[t.priority]}</span></div></div><div class="row-actions"><button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button></div></div>`,
         )
         .join("")
     : '<div class="empty">No hay tareas en esta vista.</div>';
 }
-function taskDate(t) {
-  if (t.limited) return "Fecha no disponible con este permiso";
-  if (!t.due) return "Sin fecha de entrega";
-  return esc(
-    t.dueAt
-      ? new Intl.DateTimeFormat("es-ES", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(t.dueAt))
-      : formatDate(t.due),
-  );
-}
 const orderedTasks = () =>
-  allTasks().sort(
-    (a, b) =>
-      (a.due || "9999").localeCompare(b.due || "9999") ||
-      { high: 0, medium: 1, low: 2 }[a.priority] -
-        { high: 0, medium: 1, low: 2 }[b.priority],
-  );
+  state.tasks
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.due || "9999").localeCompare(b.due || "9999") ||
+        { high: 0, medium: 1, low: 2 }[a.priority] -
+          { high: 0, medium: 1, low: 2 }[b.priority],
+    );
+function taskFilters() {
+  return `<div class="task-filters"><label>Asignatura<select id="taskSubject"><option value="all">Todas</option>${[
+    ...new Set(state.tasks.map((t) => t.subject)),
+  ]
+    .sort()
+    .map(
+      (name) =>
+        `<option value="${esc(name)}" ${subjectFilter === name ? "selected" : ""}>${esc(name)}</option>`,
+    )
+    .join("")}</select></label></div>`;
+}
 function examRows(exams) {
   return exams.length
     ? exams
@@ -218,79 +260,24 @@ function examRows(exams) {
     : '<div class="empty">Sin exámenes próximos. Respira y sigue avanzando.</div>';
 }
 function dashboard() {
-  const pending = allTasks().filter((t) => activeTask(t) && !t.done),
-    done = allTasks().filter((t) => activeTask(t) && t.done).length,
-    exams = state.exams
-      .filter((e) => e.date >= today())
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    percent =
-      done + pending.length
-        ? Math.round((done / (done + pending.length)) * 100)
-        : 0;
-  return (
-    head(
-      `Tu próximo gran paso${state.settings.name ? ", " + esc(state.settings.name) : ""} ✦`,
-      "Un vistazo a tu día. Un poco más cerca de tus objetivos.",
-      addButtons(),
-    ) +
-    `<section class="stats">${[
-      [
-        "Tareas pendientes",
-        pending.length,
-        "accent",
-        "Organiza tu siguiente paso",
-      ],
-      ["Exámenes próximos", exams.length, "peach", "Prepárate con tiempo"],
-      ["Tareas completadas", done, "mint", "Cada avance cuenta"],
-      [
-        "Asignaturas",
-        state.subjects.length +
-          classroom.cache.courses.filter(
-            (c) =>
-              classroom.isCourseVisible(c.id) && !classroomManualSubject(c.id),
-          ).length,
-        "blue",
-        "Tu universo de aprendizaje",
-      ],
-    ]
-      .map(
-        ([label, n, c, note]) =>
-          `<div class="card"><div class="stat-label">${label}</div><div class="stat-value ${c}">${n}</div><div class="stat-note">${note}</div></div>`,
-      )
-      .join(
-        "",
-      )}</section><div class="dashboard-grid"><section class="card"><div class="section-head"><h2>Próximas entregas</h2><a class="text-link" href="#tasks">Ver todas →</a></div>${taskRows(
-      orderedTasks()
-        .filter((t) => activeTask(t) && !t.done && t.due)
-        .slice(0, 6),
-    )}</section><div class="stack"><section class="card"><div class="section-head"><h2>Próximos exámenes</h2><a class="text-link" href="#calendar">Calendario →</a></div>${examRows(exams.slice(0, 3))}</section><section class="card"><h2>Actividades de Classroom</h2>${classroom.accessMode === "submissions" ? '<p class="muted">Este acceso solo permite ver estados y enlaces. Consulta el nombre y la fecha en Classroom.</p>' : ""}<p class="muted">${esc(classroom.status)} · ${pending.filter((t) => t.origin === "classroom").length} pendientes · ${pending.filter((t) => t.origin === "classroom" && overdue(t)).length} vencidas</p>${taskRows(
-      orderedTasks()
-        .filter((t) => t.origin === "classroom" && activeTask(t) && !t.done)
-        .slice(0, 3),
-    )}<a class="text-link" href="#settings">Gestionar integración →</a></section><section class="card focus-card"><span class="eyebrow">PASO A PASO</span><h2 style="margin-top:12px">Lo estás construyendo.</h2><p>No necesitas hacerlo todo hoy. Empieza por una tarea y celebra cada avance.</p><div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div><div class="stat-note">${percent}% completado · ${done} de ${done + pending.length} tareas</div></section>${timetableDashboard()}</div></div>`
-  );
+  return v4Dashboard();
 }
 function tasksView() {
   return (
-    head(
-      "Mis tareas",
-      "De las ideas a los objetivos cumplidos.",
-      addButtons(),
-    ) +
+    head("Mis tareas", "Tus objetivos, a tu ritmo.", addButtons()) +
     `<section class="card"><div class="tabs">${[
       ["pending", "Pendientes"],
       ["all", "Todas"],
       ["done", "Completadas"],
       ["overdue", "Vencidas"],
-      ["archived", "Archivadas / no disponibles"],
     ]
       .map(
-        ([v, l]) =>
-          `<button class="${filter === v ? "active" : ""}" data-filter="${v}" aria-pressed="${filter === v}">${l}</button>`,
+        ([v, label]) =>
+          `<button class="${filter === v ? "active" : ""}" data-filter="${v}">${label}</button>`,
       )
       .join(
         "",
-      )}</div>${taskFilters()}${taskRows(orderedTasks().filter((t) => (filter === "archived" ? !activeTask(t) : activeTask(t)) && (filter === "all" || filter === "archived" || (filter === "overdue" ? overdue(t) : filter === "done" ? t.done : !t.done)) && (originFilter === "all" || (originFilter === "classroom" ? t.origin === "classroom" : t.origin !== "classroom")) && (subjectFilter === "all" || t.subject === subjectFilter)))}</section><section class="card" style="margin-top:20px"><div class="section-head"><h2>Todos los exámenes</h2></div>${examRows(state.exams.slice().sort((a, b) => a.date.localeCompare(b.date)))}</section>`
+      )}</div>${taskFilters()}${taskRows(orderedTasks().filter((t) => (filter === "all" || (filter === "done" ? t.done : filter === "overdue" ? overdue(t) : !t.done)) && (subjectFilter === "all" || t.subject === subjectFilter)))}</section><section class="card" style="margin-top:20px"><div class="section-head"><h2>Todos los exámenes</h2></div>${examRows(state.exams.slice().sort((a, b) => a.date.localeCompare(b.date)))}</section>`
   );
 }
 let showNonTeaching = true;
@@ -321,11 +308,12 @@ function calendarView() {
             )
             .join("")
         : "") +
+      practiceCalendarLabels(date) +
       allTasks()
         .filter((t) => t.due === date && activeTask(t))
         .map(
           (t) =>
-            `<button class="event ${t.done ? "finished" : ""}" ${t.origin === "classroom" ? `data-classroom="${esc(t.id)}"` : `data-edit="${esc(t.id)}" data-kind="task"`}>${t.origin === "classroom" ? "▣" : "☑"} ${esc(t.name)}</button>`,
+            `<button class="event ${t.done ? "finished" : ""}" data-edit="${esc(t.id)}" data-kind="task">☑ ${esc(t.name)}</button>`,
         )
         .join("") +
       state.exams
@@ -343,19 +331,19 @@ function calendarView() {
       "Tus entregas y exámenes, justo donde deben estar.",
       addButtons(),
     ) +
-    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea</span><span><i class="swatch exam"></i>Examen</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
+    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><a class="text-link" href="#practice">Prácticas de FP →</a><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea</span><span><i class="swatch exam"></i>Examen</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span><span><i class="swatch practice"></i>Prácticas de FP</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
   );
 }
 function subjectsView() {
   return (
-    head("Tus asignaturas", "Dale a cada materia su propio espacio.") +
-    `<form id="subjectForm" class="card subject-form"><label>Nombre de la asignatura<input name="name" required maxlength="80" placeholder="Ej. Matemáticas"></label><label class="color-field">Color<input name="color" type="color" value="#b4a3ff"></label><button>Añadir asignatura</button></form><div class="subjects-grid">${state.subjects.map((s) => `<section class="card"><div class="subject-color" style="background:${s.color}"></div><h2>${esc(s.name)}</h2>${classroom.cache.courses.some((c) => classroom.isCourseVisible(c.id) && classroomManualSubject(c.id)?.id === s.id) ? '<span class="tag classroom-tag">Google Classroom</span>' : ""}<p class="muted">${allTasks().filter((t) => t.subject === s.name && activeTask(t) && !t.done).length} tareas pendientes · ${state.exams.filter((e) => e.subject === s.name).length} exámenes</p><div class="row-actions"><button data-subject-edit="${esc(s.id)}">Editar</button><button data-subject-delete="${esc(s.id)}">Eliminar</button></div></section>`).join("") || '<div class="empty">Añade tu primera asignatura para organizar tu curso.</div>'}</div>${classroomSubjects()}`
+    head("Tus asignaturas", "Personaliza tu espacio de aprendizaje.") +
+    `<form id="subjectForm" class="card subject-form"><label>Nombre de la asignatura<input name="name" required maxlength="80" placeholder="Ej. Redes"></label><label class="color-field">Color<input name="color" type="color" value="#b4a3ff"></label><button>Añadir asignatura</button></form><div class="subjects-grid">${state.subjects.map((s) => `<section class="card"><div class="subject-color" style="background:${s.color}"></div><h2>${esc(s.name)}</h2><p class="muted">${state.tasks.filter((t) => t.subject === s.name && !t.done).length} tareas pendientes</p><div class="row-actions"><button data-subject-edit="${esc(s.id)}">Editar</button><button data-subject-delete="${esc(s.id)}">Eliminar</button></div></section>`).join("") || '<div class="empty">Añade tu primera asignatura.</div>'}</div>`
   );
 }
 function settingsView() {
   return (
-    head("A tu manera", "Un espacio que se adapta a ti.") +
-    `<div class="settings">${classroomSettings()}<section class="card"><h2>Tu perfil</h2><form id="profileForm" style="margin-top:20px"><label>¿Cómo te llamas?<input name="name" maxlength="40" value="${esc(state.settings.name)}" placeholder="Tu nombre"></label><button>Guardar ajustes</button></form></section><section class="card"><h2>Tus datos, bajo tu control</h2><p>Los datos se guardan únicamente en este navegador. Usa la misma dirección web para conservar el acceso y exporta copias antes de borrar los datos del navegador o cambiar de dispositivo.</p><div class="actions"><button data-action="export">Exportar copia JSON</button><button class="secondary" data-action="import">Importar copia</button><button class="secondary" data-action="original">Exportar datos originales</button></div><input id="importFile" type="file" accept="application/json,.json" hidden><p>La importación valida el archivo y crea una copia local de los datos actuales antes de reemplazarlos. Classroom es opcional y de solo lectura; Moodle no está conectado. Las copias JSON de este apartado contienen tus datos personales de StudyFlow, no la caché independiente de Classroom.</p></section><section class="card"><h2>StudyFlow 3.0</h2><p>Tema oscuro · Classroom opcional · Autorización oficial de Google</p></section></div>`
+    head("A tu manera", "Tus datos permanecen en este navegador.") +
+    `<div class="settings"><section class="card"><h2>Tu perfil</h2><form id="profileForm"><label>¿Cómo te llamas?<input name="name" maxlength="40" value="${esc(state.settings.name)}"></label><button>Guardar ajustes</button></form></section><section class="card"><h2>Copias de seguridad</h2><p>Los datos no se sincronizan entre dispositivos. Exporta una copia antes de cambiar de navegador, dirección web o borrar almacenamiento.</p><div class="actions"><button data-action="export">Exportar copia JSON</button><button class="secondary" data-action="import">Importar copia</button><button class="secondary" data-action="original">Exportar datos originales</button><button class="secondary" data-action="export-migration">Exportar copia anterior a 4.0</button></div><input id="importFile" type="file" accept="application/json,.json" hidden><p>Incluye tareas, exámenes, asignaturas, horarios, notas, apuntes, estudio y prácticas. Importar reemplaza los apartados incluidos tras confirmación y conserva una copia previa.</p></section>${v4ImportReview()}<section class="card"><h2>StudyFlow 4.0</h2><p>Tu espacio de FP · Sin cuentas ni servicios externos</p></section></div>`
   );
 }
 function render() {
@@ -371,7 +359,6 @@ function render() {
   ).length;
   $("main").innerHTML =
     (storageBlocked ? `<p role="alert" class="card">${loadError}</p>` : "") +
-    classroomCacheNotice() +
     {
       dashboard,
       tasks: tasksView,
@@ -379,6 +366,12 @@ function render() {
       timetable: timetableView,
       subjects: subjectsView,
       settings: settingsView,
+      grades: gradesView,
+      study: studyView,
+      stats: statsView,
+      notes: notesView,
+      practice: practiceView,
+      reminders: remindersView,
     }[v]();
 }
 function openEditor(kind, id = null, date = today()) {
@@ -404,6 +397,7 @@ function openEditor(kind, id = null, date = today()) {
     (kind === "task" ? "tarea" : "examen");
   form.elements.name.value = item?.name || "";
   form.elements.subject.value = item?.subject || state.subjects[0].name;
+  form.elements.date.required = kind === "exam";
   form.elements.date.value = item?.due || item?.date || date;
   form.elements.priority.value = item?.priority || "medium";
   $("priorityField").hidden = kind !== "task";
@@ -413,7 +407,10 @@ $("itemForm").onsubmit = (e) => {
   e.preventDefault();
   const f = e.target.elements,
     name = f.name.value.trim();
-  if (!name || !validDate(f.date.value)) {
+  if (
+    !name ||
+    (f.date.value ? !validDate(f.date.value) : editing.kind === "exam")
+  ) {
     notify("Introduce un nombre y una fecha válidos.");
     return;
   }
@@ -461,6 +458,7 @@ function openDay(date) {
   const info = academicDay(date);
   $("dayTitle").textContent = formatDate(date);
   $("dayReasons").innerHTML =
+    practiceDayDetails(date) +
     (info.weekend ? "<p>Fin de semana: no hay clases ordinarias.</p>" : "") +
     info.events
       .map(
@@ -499,19 +497,7 @@ document.addEventListener("click", (e) => {
   if (d.action === "new-task") openEditor("task");
   if (d.action === "new-exam") openEditor("exam");
   if (d.edit) openEditor(d.kind, d.edit);
-  if (d.classroom) openClassroomTask(d.classroom);
-  if (d.action === "classroom-connect") classroom.connect();
-  if (d.action === "classroom-metadata") {
-    location.hash = "settings";
-    classroom.connectWithMode("full");
-  }
-  if (d.action === "classroom-limited")
-    classroom.connectWithMode("submissions");
-  if (d.action === "classroom-restore") classroom.connect({ restore: true });
-  if (d.action === "classroom-cancel") classroom.cancelConnect();
-  if (d.action === "classroom-sync") classroom.sync();
-  if (d.action === "classroom-disconnect") classroom.disconnect();
-  if (d.action === "classroom-retry") classroom.prepare();
+
   if (d.delete && confirm("¿Eliminar este registro?"))
     mutate((s) => {
       const key = d.kind === "task" ? "tasks" : "exams";
@@ -534,17 +520,43 @@ document.addEventListener("click", (e) => {
     download(JSON.stringify(state, null, 2), "studyflow-datos.json");
   if (d.action === "original") {
     try {
+      let original = localStorage.getItem(BACKUP);
+      if (!original) {
+        try {
+          original = JSON.parse(
+            localStorage.getItem("studyflow-backup-before-v4") || "null",
+          )?.personal;
+        } catch {}
+      }
       download(
-        localStorage.getItem(BACKUP) || localStorage.getItem(KEY) || "{}",
+        original || localStorage.getItem(KEY) || "{}",
         "studyflow-original.json",
       );
     } catch {
       notify("No se puede acceder al almacenamiento.");
     }
   }
+  if (d.action === "export-migration") {
+    const backup = localStorage.getItem("studyflow-backup-before-v4");
+    if (backup) download(backup, "studyflow-copia-anterior-v4.json");
+    else
+      notify(
+        "No hay una copia anterior a 4.0 en este navegador. Puedes exportar la copia actual.",
+      );
+  }
   if (d.action === "import") $("importFile").click();
   if (d.subjectDelete) {
     const s = state.subjects.find((s) => String(s.id) === d.subjectDelete);
+    if (
+      (state.grades || []).some((r) => r.subjectId === String(s.id)) ||
+      (state.notes || []).some((n) => n.subjectId === String(s.id)) ||
+      (state.studySessions || []).some((r) => r.subjectId === String(s.id))
+    ) {
+      notify(
+        "Esta asignatura tiene registros académicos. Reasígnalos antes de eliminarla.",
+      );
+      return;
+    }
     if (
       Timetable.get(state).schedules.some((schedule) =>
         schedule.blocks.some(
@@ -599,30 +611,9 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("change", async (e) => {
-  if (e.target.id === "taskOrigin") {
-    originFilter = e.target.value;
-    render();
-  }
   if (e.target.id === "taskSubject") {
     subjectFilter = e.target.value;
     render();
-  }
-  if (e.target.dataset.classroomVisible) {
-    try {
-      classroom.setCourseVisibility(
-        e.target.dataset.classroomVisible,
-        e.target.checked,
-      );
-    } catch (error) {
-      notify(error.message);
-    }
-  }
-  if (e.target.dataset.classroomMap) {
-    try {
-      classroom.setMapping(e.target.dataset.classroomMap, e.target.value);
-    } catch (error) {
-      notify(error.message);
-    }
   }
   if (e.target.id === "showNonTeaching") {
     showNonTeaching = e.target.checked;
@@ -645,12 +636,58 @@ document.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (file.size > 5 * 1024 * 1024)
         throw Error("El archivo supera los 5 MB");
-      const next = normalize(JSON.parse(await file.text()));
-      if (!Object.hasOwn(next, "timetable") && state.timetable)
-        next.timetable = structuredClone(state.timetable);
+      const payload = JSON.parse(await file.text());
+      const bundle =
+        payload &&
+        !Array.isArray(payload.tasks) &&
+        Object.hasOwn(payload, "personal");
+      const source = bundle
+        ? payload.personal
+          ? typeof payload.personal === "string"
+            ? JSON.parse(payload.personal)
+            : payload.personal
+          : { tasks: [], exams: [] }
+        : payload;
+      let archived = null;
+      if (bundle && payload.imported) {
+        try {
+          archived = JSON.parse(payload.imported);
+        } catch {}
+      }
+      const next = normalize(source);
+      for (const field of [
+        "timetable",
+        "grades",
+        "gradeSettings",
+        "notes",
+        "studySessions",
+        "studySettings",
+        "pomodoro",
+        "practice",
+        "reminderSettings",
+        "dismissedReminders",
+        "importArchive",
+      ])
+        if (!Object.hasOwn(next, field) && state[field] !== undefined)
+          next[field] = structuredClone(state[field]);
+      const refs = new Set([
+        ...(next.grades || []).map((r) => r.subjectId),
+        ...(next.notes || []).map((r) => r.subjectId),
+        ...(next.studySessions || []).map((r) => r.subjectId),
+        next.pomodoro?.subjectId,
+        ...(next.timetable?.schedules || []).flatMap((s) =>
+          s.blocks.map((b) => b.subjectId),
+        ),
+      ]);
+      for (const subject of state.subjects)
+        if (
+          refs.has(String(subject.id)) &&
+          !next.subjects.some((s) => String(s.id) === String(subject.id))
+        )
+          next.subjects.push(structuredClone(subject));
       if (
         !confirm(
-          `¿Importar ${next.tasks.length} tareas y ${next.exams.length} exámenes? Se reemplazarán los datos actuales.`,
+          `¿Importar ${next.tasks.length} tareas y ${next.exams.length} exámenes? Se reemplazarán los apartados incluidos; los ausentes de copias antiguas se conservarán.`,
         )
       )
         return;
@@ -659,24 +696,14 @@ document.addEventListener("change", async (e) => {
           "Exporta y recupera los datos originales antes de importar.",
         );
       localStorage.setItem("studyflow-before-import", JSON.stringify(state));
-      if (commit(next)) notify("Copia importada correctamente.");
+      if (commit(V4.migrate(next, archived)))
+        notify("Copia importada correctamente.");
     } catch (error) {
       notify("No se ha importado: " + error.message);
     }
   }
 });
 document.addEventListener("submit", (e) => {
-  if (e.target.id === "classroomConfig") {
-    e.preventDefault();
-    try {
-      classroom.saveConfig(
-        e.target.elements.clientId.value,
-        e.target.elements.accessMode.value,
-      );
-    } catch (error) {
-      notify(error.message);
-    }
-  }
   if (e.target.id === "subjectForm") {
     e.preventDefault();
     const f = e.target.elements,
@@ -710,108 +737,5 @@ document.addEventListener("keydown", (e) => {
     $("menu").setAttribute("aria-expanded", "false");
   }
 });
-window.addEventListener("hashchange", () => {
-  render();
-  if (view() === "settings") classroom.prepare();
-});
-window.addEventListener("classroomchange", render);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) classroom.autoSync();
-});
-window.addEventListener("focus", () => classroom.autoSync());
-setInterval(() => {
-  if (!document.hidden) classroom.autoSync();
-}, 300000);
-$("closeClassroomDetails").onclick = () => $("classroomDetails").close();
+window.addEventListener("hashchange", render);
 render();
-if (classroom.config.clientId) classroom.prepare();
-
-function classroomManualSubject(courseId) {
-  const course = classroom.cache.courses.find((c) => c.id === courseId);
-  const mapped = classroom.config.mapping[courseId];
-  return (
-    state.subjects.find((s) => String(s.id) === mapped) ||
-    (!mapped && course
-      ? state.subjects.find(
-          (s) => s.name.toLocaleLowerCase() === course.name.toLocaleLowerCase(),
-        )
-      : null)
-  );
-}
-function classroomSubject(courseId, fallback = "Classroom") {
-  return (
-    classroomManualSubject(courseId)?.name ||
-    classroom.cache.courses.find((c) => c.id === courseId)?.name ||
-    fallback
-  );
-}
-function taskFilters() {
-  const subjects = [
-    ...new Set(
-      allTasks()
-        .filter((t) => (filter === "archived" ? !activeTask(t) : activeTask(t)))
-        .map((t) => t.subject),
-    ),
-  ].sort();
-  return `<div class="task-filters"><label>Origen<select id="taskOrigin"><option value="all">Todos</option><option value="personal" ${originFilter === "personal" ? "selected" : ""}>Personal</option><option value="classroom" ${originFilter === "classroom" ? "selected" : ""}>Google Classroom</option></select></label><label>Asignatura<select id="taskSubject"><option value="all">Todas</option>${subjects.map((name) => `<option value="${esc(name)}" ${subjectFilter === name ? "selected" : ""}>${esc(name)}</option>`).join("")}</select></label></div>`;
-}
-function classroomLogo() {
-  return '<svg class="classroom-logo" viewBox="0 0 64 64" role="img" aria-label="Google Classroom"><rect x="3" y="10" width="58" height="44" rx="4" fill="#fbbc04"/><path fill="#0f9d58" d="M8 15h48v34H8z"/><circle cx="32" cy="29" r="6" fill="#fff"/><path fill="#fff" d="M22 45v-4c0-7 20-7 20 0v4z"/><circle cx="17" cy="33" r="4" fill="#a8dab5"/><circle cx="47" cy="33" r="4" fill="#a8dab5"/><path fill="#a8dab5" d="M10 45v-3c0-5 12-6 12-1v4zm32 0v-4c0-5 12-4 12 1v3z"/><path fill="#f5f5f5" d="M43 47h10v3H43z"/></svg>';
-}
-function classroomSettings() {
-  const connected = classroom.connected;
-  return `<section class="card integration-card"><h2>Integraciones</h2><div class="integration-title">${classroomLogo()}<div><h3>Google Classroom</h3><span class="tag classroom-tag" role="status">${esc(classroom.status)}</span></div></div><p>Solo lectura mediante la API oficial. StudyFlow no entrega ni modifica actividades en Google.</p><p class="calendar-warning">${classroom.accessMode === "submissions" ? "Modo entregas propias: permite consultar clases, estados y enlaces. Google no proporciona títulos, enunciados ni fechas con este permiso; las entregas no se sitúan en el calendario." : "Modo completo: requiere classroom.coursework.me.readonly. Si Google no te permite concederlo, utiliza el modo de entregas propias."}</p><p>${classroom.cache.account?.email ? `Cuenta: <strong>${esc(classroom.cache.account.email)}</strong>` : "Sin cuenta identificada."}<br>Última sincronización correcta: ${classroom.cache.lastSync ? esc(new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(new Date(classroom.cache.lastSync))) : "Todavía no se ha sincronizado."}</p>${!connected && classroom.cache.lastSync ? "<p>Se muestra una copia local. Reconecta para obtener cambios recientes.</p>" : ""}${classroom.progress ? `<p id="classroomProgress" role="status" aria-live="polite">${esc(classroom.progress)}</p>` : ""}${classroom.phase !== "idle" ? `<details class="oauth-diagnostics"><summary>Detalles de conexión (sin credenciales)</summary><p>Respuesta OAuth recibida: ${classroom.diagnostics.callbackReceived ? "sí" : "no"}<br>Token de acceso recibido: ${classroom.diagnostics.tokenReceived ? "sí" : "no"}<br>Cuenta verificada: ${classroom.diagnostics.identityVerified ? "sí" : "no"}<br>Consulta: ${esc({ identity: "Identidad de Google", courses: "Clases", coursework: "Actividades", submissions: "Entregas" }[classroom.diagnostics.apiStep] || "Todavía sin consulta")}<br>Código: ${esc(classroom.diagnostics.code || "Sin error registrado")}</p><h4>Permisos solicitados</h4><ul>${classroom.diagnostics.requestedScopes.map((scope) => `<li><code>${esc(scope)}</code></li>`).join("")}</ul><h4>Permisos concedidos por Google</h4>${classroom.diagnostics.scopesReported ? `<ul>${classroom.diagnostics.grantedScopes.map((scope) => `<li><code>${esc(scope)}</code></li>`).join("") || "<li>Ninguno de los permisos reconocidos.</li>"}</ul>` : "<p>Google todavía no ha devuelto una lista de permisos.</p>"}${classroom.diagnostics.missingScopes.length ? `<h4>Permisos que faltan</h4><ul>${classroom.diagnostics.missingScopes.map((scope) => `<li><code>${esc(scope)}</code></li>`).join("")}</ul>` : ""}${classroom.diagnostics.unconfirmedScopes.length ? `<h4>Permisos sin confirmar por GIS</h4><ul>${classroom.diagnostics.unconfirmedScopes.map((scope) => `<li><code>${esc(scope)}</code></li>`).join("")}</ul>` : ""}</details>` : ""}${classroom.error ? `<p role="alert" class="calendar-warning">${esc(classroom.error)}</p>` : ""}${classroomMetadataControls()}<div class="actions">${["waiting", "identity"].includes(classroom.phase) ? '<button class="secondary" data-action="classroom-cancel">Cancelar conexión</button>' : ""}<button data-action="classroom-connect" ${!classroom.config.clientId || !classroom.ready || classroom.busy || connected ? "disabled" : ""}>Conectar con Google Classroom</button><button data-action="classroom-sync" class="secondary" ${!connected || classroom.busy ? "disabled" : ""}>${classroom.busy ? "Sincronizando / conectando…" : "Sincronizar ahora"}</button><button data-action="classroom-disconnect" class="secondary" ${!connected && !classroom.cache.account ? "disabled" : ""}>Desconectar</button>${classroom.config.clientId && !classroom.ready ? `<button class="secondary" data-action="classroom-retry" ${classroom.loading ? "disabled" : ""}>${classroom.loading ? "Cargando Google…" : "Cargar acceso de Google"}</button>` : ""}</div><p>La autorización caduca y se mantiene únicamente en memoria. Al recargar, vuelve a conectar. Mientras esta pestaña conserve una autorización válida, se actualiza cada cinco minutos y al volver a la aplicación. Desconectar elimina únicamente la copia de Classroom e intenta revocar el permiso en Google.</p><form id="classroomConfig"><label>Modo de acceso<select name="accessMode" ${connected || classroom.busy ? "disabled" : ""}><option value="submissions" ${classroom.accessMode === "submissions" ? "selected" : ""}>Entregas propias · acceso limitado</option><option value="full" ${classroom.accessMode === "full" ? "selected" : ""}>Actividades completas · requiere coursework.me.readonly</option></select></label><label>OAuth Client ID de aplicación web<input name="clientId" value="${esc(classroom.config.clientId)}" maxlength="240" placeholder="…apps.googleusercontent.com" autocomplete="off" ${connected || classroom.busy ? "disabled" : ""}></label><button class="secondary" ${connected || classroom.busy ? "disabled" : ""}>Guardar Client ID</button></form><p><a class="text-link" href="https://github.com/filipireneusz23/StudyFlow/blob/main/docs/google-classroom.md" target="_blank" rel="noopener noreferrer">Guía de configuración de Google Cloud ↗</a> · El Client ID es público; nunca introduzcas un secreto ni tu contraseña.</p>${classroomCourseControls()}</section>`;
-}
-function classroomSubjects() {
-  const courses = classroom.cache.courses.filter(
-    (c) => classroom.isCourseVisible(c.id) && !classroomManualSubject(c.id),
-  );
-  if (!courses.length) return "";
-  return `<h2 style="margin:28px 0 18px">Asignaturas de Google Classroom</h2><div class="subjects-grid">${courses.map((c) => `<section class="card"><h3>${esc(c.name)}</h3><span class="tag classroom-tag">Google Classroom${c.courseState === "ARCHIVED" ? " · archivada" : ""}</span><p class="muted">${classroom.cache.tasks.filter((t) => t.courseId === c.id && t.availability === "active" && !t.done).length} actividades pendientes</p><a class="text-link" href="#settings">Relacionar con una asignatura personal →</a></section>`).join("")}</div>`;
-}
-function openClassroomTask(id) {
-  const t = allTasks().find((t) => t.origin === "classroom" && t.id === id);
-  if (!t) return;
-  $("classroomTaskTitle").textContent = t.limited
-    ? "Actividad sin título disponible"
-    : t.name;
-  $("classroomTaskBody").innerHTML =
-    `<p><span class="tag classroom-tag">Google Classroom · solo lectura</span></p><p>${esc(t.subject)} · ${taskDate(t)}</p><p>${esc(statusLabels[t.status] || t.status)}${!activeTask(t) ? " · Oculta / archivada / no disponible en la última consulta" : ""}</p><p class="task-description">${esc(t.description || "Sin descripción.")}</p>${t.limited ? `<p class="muted">Referencia de la actividad: ${esc(t.workId || t.id)}</p>` : ""}${t.limited ? '<p class="calendar-warning">Datos limitados: el identificador mostrado no es el título original. No se conoce la fecha de entrega con este acceso.</p>' : ""}${Classroom.safeLink(t.url) ? `<a class="text-link" href="${esc(Classroom.safeLink(t.url))}" target="_blank" rel="noopener noreferrer">Abrir actividad original en Classroom ↗</a>` : ""}<p class="muted">${classroom.connected ? "Los cambios se consultan al sincronizar." : "Copia local: vuelve a conectar para actualizar."}</p>`;
-  $("classroomDetails").showModal();
-}
-
-function classroomCourseControls() {
-  const active = classroom.cache.courses.filter(
-    (c) => c.courseState === "ACTIVE",
-  );
-  const archived = classroom.cache.courses.filter(
-    (c) => c.courseState === "ARCHIVED",
-  );
-  if (!active.length && !archived.length) return "";
-  return `<h3>Clases que aparecen en StudyFlow</h3><p>Las archivadas se ocultan automáticamente. Si una clase de otro año sigue activa en Google, desmárcala aquí. No se borran sus datos ni se modifica Classroom.</p><div class="course-mappings">${active.map((c) => `<div><label class="toggle"><input type="checkbox" data-classroom-visible="${esc(c.id)}" ${classroom.isCourseVisible(c.id) ? "checked" : ""}>${esc(c.name)}</label><label>Relacionar con asignatura personal<select data-classroom-map="${esc(c.id)}"><option value="">Automático por nombre / independiente</option>${state.subjects.map((s) => `<option value="${esc(s.id)}" ${classroom.config.mapping[c.id] === String(s.id) ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></label></div>`).join("")}</div>${archived.length ? `<details><summary>Clases archivadas (${archived.length})</summary><p>Conservadas para consulta; no aparecen en las vistas habituales.</p><ul>${archived.map((c) => `<li>${esc(c.name)}</li>`).join("")}</ul></details>` : ""}`;
-}
-
-function classroomCacheNotice() {
-  if (!classroom.cache.lastSync) return "";
-  const fresh =
-    classroom.connected && classroom.phase === "complete" && !classroom.error;
-  const date = new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(classroom.cache.lastSync));
-  return `<section class="classroom-cache-notice" aria-label="Estado de datos de Classroom"><div><strong>${fresh ? "Datos de Classroom sincronizados" : "Copia guardada de Classroom"}</strong><p>Última sincronización correcta: ${esc(date)}${classroom.cache.account?.email ? " · " + esc(classroom.cache.account.email) : ""}. ${fresh ? "Se actualizan periódicamente mientras la autorización sea válida." : classroom.connected ? "Se muestra la última copia guardada mientras se actualizan los datos o se resuelve el error de sincronización." : "Los datos están disponibles; vuelve a autorizar para buscar cambios."}</p></div>${!classroom.connected ? `<button class="secondary" data-action="classroom-restore" ${!classroom.ready || classroom.busy ? "disabled" : ""}>${classroom.loading ? "Cargando Google…" : "Volver a autorizar Google"}</button>` : ""}</section>`;
-}
-
-function classroomMetadataControls() {
-  const labels = {
-    not_checked: classroom.diagnostics.missingScopes.includes(
-      Classroom.SCOPES[1],
-    )
-      ? "Falta classroom.coursework.me.readonly; consulta no realizada"
-      : "No comprobado en esta sesión",
-    confirmed: "Acceso comprobado mediante la API",
-    not_found: "Actividad consultada no disponible (404)",
-    failed: "La consulta fue rechazada o falló",
-  };
-  return `<section class="metadata-controls"><h3>Títulos, descripciones y fechas originales</h3><p>Solo se obtienen del recurso CourseWork. El permiso de entregas propias no permite leer esos datos.</p><p>courseWork.list: ${esc(classroom.accessMode === "submissions" ? "No autorizado por el modo limitado" : labels[classroom.metadataAccess.list])}<br>courseWork.get: ${esc(classroom.accessMode === "submissions" ? "No autorizado por el modo limitado" : labels[classroom.metadataAccess.get])}</p><div class="actions"><button data-action="classroom-metadata" ${!classroom.config.clientId || !classroom.ready || classroom.busy ? "disabled" : ""}>Autorizar títulos y fechas reales</button><button data-action="classroom-limited" class="secondary" ${!classroom.config.clientId || !classroom.ready || classroom.busy ? "disabled" : ""}>Continuar con entregas propias</button></div><p>Google debe conceder classroom.coursework.me.readonly. Puedes solicitarlo sin borrar la copia guardada. Si tu cuenta o proyecto lo bloquea, no se pueden obtener automáticamente los títulos y fechas con los permisos actuales.</p></section>`;
-}
