@@ -12,6 +12,7 @@
     <script src="v4-ui.js" defer></script>
     <script src="timetable.js" defer></script>
     <script src="timetable-ui.js" defer></script>
+    <script src="task-details.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -82,12 +83,55 @@
             <option value="low">Baja</option>
           </select></label
         >
+        <fieldset id="taskExtras">
+          <legend>Notas y enlaces de la tarea</legend>
+          <label
+            >Notas / Instrucciones<textarea
+              name="taskNotes"
+              rows="5"
+              maxlength="200000"
+              placeholder="Ej. Hacer los ejercicios 2 y 3 de la página 45"
+            ></textarea>
+          </label>
+          <div class="section-head feature-gap">
+            <h3>Enlaces</h3>
+            <button type="button" id="addTaskLink" class="secondary">
+              ＋ Añadir enlace
+            </button>
+          </div>
+          <div id="taskLinkRows"></div>
+          <p class="muted">
+            Enlaces guardados manualmente: solo HTTP o HTTPS. No hay conexión
+            con APIs externas.
+          </p>
+        </fieldset>
         <div class="actions">
           <button type="button" class="secondary" id="cancelDialog">
             Cancelar</button
           ><button type="submit">Guardar</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="taskDetails" aria-labelledby="taskDetailsTitle">
+      <div class="section-head">
+        <h2 id="taskDetailsTitle"></h2>
+        <button
+          type="button"
+          id="closeTaskDetails"
+          class="secondary"
+          aria-label="Cerrar tarea"
+        >
+          ×
+        </button>
+      </div>
+      <p id="taskDetailsMeta" class="muted"></p>
+      <h3>Notas / Instrucciones</h3>
+      <div id="taskDetailsNotes" class="task-notes-text"></div>
+      <h3 class="feature-gap">Enlaces</h3>
+      <div id="taskDetailsLinks" class="task-links"></div>
+      <button id="editTaskDetails" type="button" class="feature-gap">
+        Editar tarea
+      </button>
     </dialog>
     <dialog id="dayDetails" aria-labelledby="dayTitle">
       <div class="section-head">

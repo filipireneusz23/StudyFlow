@@ -35,3 +35,11 @@ Las horas efectivas provienen únicamente de registros de asistencia. Guardar la
 Toda la información usa el almacenamiento de este navegador y las copias JSON. No hay sincronización entre dispositivos, servidor de cuentas ni llamadas a Classroom. La migración a 4.0 hace una copia previa y conserva los registros importados; los que carezcan de título útil no se convierten en tareas inventadas. Revisar y convertir una copia importada es una decisión local del usuario, no una actualización desde el origen.
 
 Las copias completas nuevas reemplazan los apartados que incluyen tras confirmación. Las antiguas que no contienen notas, apuntes, estudio, prácticas u horario no borran esos apartados actuales; se preservan las asignaturas necesarias para sus referencias. Los errores de validación o almacenamiento no se presentan como guardados correctos.
+
+### Notas y enlaces de cada tarea
+
+El formulario de creación y edición incluye instrucciones de varias líneas y hasta 50 enlaces manuales con nombre personalizado. «Detalles» muestra las instrucciones como texto y los enlaces se abren en otra pestaña con protección `noopener noreferrer`. Se pueden editar o eliminar desde «Editar tarea». Guardar conserva estos campos junto con el resto de la tarea, sin servicios externos ni autorización de Google; se puede pegar una URL de Classroom como cualquier enlace.
+
+Se admiten únicamente URL absolutas HTTP y HTTPS. Las notas y nombres nunca se interpretan como HTML. Las tareas antiguas siguen funcionando sin estos campos opcionales (`notes` y `links`, lista de `{label, url}`), sin reescribirlas al cargar. Las copias JSON incluyen los campos y su importación valida los enlaces antes de guardar. El resto de los datos de cada tarea se conserva.
+
+Pruebas adicionales: `node --test tests/task-details.cjs` y `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/task-details-browser.cjs` (Playwright con Chromium). Cubren compatibilidad, persistencia, edición, eliminación, contenido seguro, exportación/importación y pantalla móvil.

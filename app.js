@@ -224,7 +224,7 @@ function taskRows(tasks) {
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}"><input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}><div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span><span class="tag priority-${t.priority}">${priorities[t.priority]}</span></div></div><div class="row-actions"><button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button></div></div>`,
+            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}"><input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}><div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span><span class="tag priority-${t.priority}">${priorities[t.priority]}</span></div>${taskLinksHTML(t)}</div><div class="row-actions"><button data-task-details="${esc(t.id)}">Detalles</button><button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button></div></div>`,
         )
         .join("")
     : '<div class="empty">No hay tareas en esta vista.</div>';
@@ -401,6 +401,7 @@ function openEditor(kind, id = null, date = today()) {
   form.elements.date.value = item?.due || item?.date || date;
   form.elements.priority.value = item?.priority || "medium";
   $("priorityField").hidden = kind !== "task";
+  prepareTaskExtras(kind, item);
   $("editor").showModal();
 }
 $("itemForm").onsubmit = (e) => {
@@ -415,6 +416,15 @@ $("itemForm").onsubmit = (e) => {
     return;
   }
   const { kind, id } = editing;
+  let extra = {};
+  if (kind === "task") {
+    try {
+      extra = { notes: f.taskNotes.value, links: readTaskLinkDraft() };
+    } catch (error) {
+      notify(error.message);
+      return;
+    }
+  }
   if (
     mutate((s) => {
       const list = kind === "task" ? s.tasks : s.exams;
@@ -422,7 +432,7 @@ $("itemForm").onsubmit = (e) => {
         name,
         subject: f.subject.value,
         [kind === "task" ? "due" : "date"]: f.date.value,
-        ...(kind === "task" ? { priority: f.priority.value } : {}),
+        ...(kind === "task" ? { priority: f.priority.value, ...extra } : {}),
       };
       if (id)
         Object.assign(

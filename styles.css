@@ -1145,3 +1145,43 @@ fieldset .toggle {
     gap: 10px;
   }
 }
+.task-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.task-link-button {
+  display: inline-block;
+  font-size: 11px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.task-link-draft {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.task-link-draft button {
+  justify-self: start;
+  font-size: 11px;
+}
+.task-notes-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  font-size: 13px;
+  background: #121823;
+  border-radius: 9px;
+  padding: 16px;
+  margin-top: 12px;
+}
+#taskDetailsTitle {
+  overflow-wrap: anywhere;
+}
+#taskExtras {
+  margin: 0;
+}

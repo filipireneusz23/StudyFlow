@@ -310,8 +310,50 @@
     archive.converted.push(id);
     return next;
   }
+  function safeTaskUrl(value) {
+    if (typeof value !== "string") return null;
+    const text = value.trim();
+    if (!/^https?:\/\//i.test(text) || /[\u0000-\u001f\u007f]/.test(text))
+      return null;
+    try {
+      const url = new URL(text);
+      return ["https:", "http:"].includes(url.protocol) && url.hostname
+        ? url.href
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  function taskLinks(value) {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > 50)
+      throw Error("Los enlaces deben ser una lista de hasta 50 elementos.");
+    return value.map((link, index) => {
+      if (!link || typeof link !== "object" || !safeTaskUrl(link.url))
+        throw Error(
+          `Enlace ${index + 1}: introduce una URL completa con HTTP o HTTPS.`,
+        );
+      if (
+        link.label !== undefined &&
+        (typeof link.label !== "string" || link.label.length > 120)
+      )
+        throw Error("El nombre del enlace debe tener hasta 120 caracteres.");
+      return {
+        label: link.label?.trim() || "Abrir enlace",
+        url: safeTaskUrl(link.url),
+      };
+    });
+  }
   function validate(state) {
     for (const task of state.tasks || []) {
+      if (
+        task.notes !== undefined &&
+        (typeof task.notes !== "string" || task.notes.length > 200000)
+      )
+        throw Error(
+          "Las notas de la tarea deben ser texto de hasta 200000 caracteres.",
+        );
+      taskLinks(task.links);
       if (typeof task.name !== "string" || typeof task.subject !== "string")
         throw Error("Tarea no válida.");
       if (task.due) date(task.due);
@@ -553,6 +595,8 @@
     migrate,
     convertImport,
     validate,
+    safeTaskUrl,
+    taskLinks,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.V4 = api;
