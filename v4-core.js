@@ -11,6 +11,45 @@
     return d;
   }
   const days = (a, b) => Math.round((date(b) - date(a)) / 86400000);
+  // Calendar-day arithmetic uses local date parts, never elapsed 24-hour periods.
+  function taskUrgency(task, now = new Date()) {
+    if (task.done)
+      return { level: "completed", color: "#94A3B8", text: "Completada" };
+    if (!task.due)
+      return { level: "neutral", color: "#94A3B8", text: "Sin fecha" };
+    date(task.due);
+    const ordinal = (value) => {
+      const [y, m, d] = value.split("-").map(Number);
+      return Date.UTC(y, m - 1, d) / 86400000;
+    };
+    const remaining = ordinal(task.due) - ordinal(key(now));
+    // Optional time is local, not UTC. Date resolves a repeated DST time to
+    // its first occurrence and advances a nonexistent time by the DST gap.
+    const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(task.dueTime || "")
+      ? task.dueTime
+      : null;
+    const deadline = time ? new Date(`${task.due}T${time}:00`).getTime() : null;
+    if (
+      remaining < 0 ||
+      (remaining === 0 && deadline !== null && now.getTime() >= deadline)
+    )
+      return { level: "overdue", color: "#991B1B", text: "Atrasada" };
+    if (remaining === 0)
+      return { level: "today", color: "#EF4444", text: "Vence hoy" };
+    const [level, color] =
+      remaining === 1
+        ? ["tomorrow", "#F97316"]
+        : remaining <= 3
+          ? ["soon", "#EAB308"]
+          : remaining <= 7
+            ? ["week", "#84CC16"]
+            : ["later", "#22C55E"];
+    return {
+      level,
+      color,
+      text: remaining === 1 ? "Queda 1 día" : `Quedan ${remaining} días`,
+    };
+  }
   function addDuration(start, amount, unit) {
     const d = date(start);
     if (!Number.isInteger(amount) || amount < 1 || amount > 3650)
@@ -354,6 +393,13 @@
           "Las notas de la tarea deben ser texto de hasta 200000 caracteres.",
         );
       taskLinks(task.links);
+      if (
+        task.dueTime !== undefined &&
+        task.dueTime !== "" &&
+        (typeof task.dueTime !== "string" ||
+          !/^([01]\d|2[0-3]):[0-5]\d$/.test(task.dueTime))
+      )
+        throw Error("Hora de vencimiento no válida.");
       if (typeof task.name !== "string" || typeof task.subject !== "string")
         throw Error("Tarea no válida.");
       if (task.due) date(task.due);
@@ -597,6 +643,7 @@
     validate,
     safeTaskUrl,
     taskLinks,
+    taskUrgency,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.V4 = api;

@@ -72,8 +72,8 @@ const assert = require("node:assert/strict");
     assert.equal(
       await day
         .locator(".event:not(.exam)")
-        .evaluate((e) => getComputedStyle(e).backgroundColor),
-      "rgb(29, 78, 216)",
+        .evaluate((e) => getComputedStyle(e).borderLeftColor),
+      "rgb(239, 68, 68)",
     );
     assert.equal(
       await day

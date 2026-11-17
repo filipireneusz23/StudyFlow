@@ -215,16 +215,18 @@ function allTasks() {
   return state.tasks;
 }
 const activeTask = () => true;
-const overdue = (t) => !t.done && Boolean(t.due) && t.due < today();
+const overdue = (t) => V4.taskUrgency(t).level === "overdue";
 function taskDate(t) {
-  return t.due ? esc(formatDate(t.due)) : "Sin fecha";
+  return t.due
+    ? esc(formatDate(t.due) + (t.dueTime ? " · " + t.dueTime : ""))
+    : "Sin fecha";
 }
 function taskRows(tasks) {
   return tasks.length
     ? tasks
         .map(
           (t) =>
-            `<div class="task-row ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}"><input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}><div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span><span class="tag priority-${t.priority}">${priorities[t.priority]}</span></div>${taskLinksHTML(t)}</div><div class="row-actions"><button data-task-details="${esc(t.id)}">Detalles</button><button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button></div></div>`,
+            `<div class="task-row urgency-item ${t.done ? "done" : ""}" data-task-id="${esc(t.id)}" ${urgencyAttributes(t)}><input type="checkbox" data-toggle="${esc(t.id)}" aria-label="Completar ${esc(t.name)}" ${t.done ? "checked" : ""}><div class="item-body"><div class="item-title">${esc(t.name)}</div><div class="item-meta"><span class="tag">${esc(t.subject)}</span><span class="${overdue(t) ? "overdue" : ""}">${taskDate(t)}</span><span class="tag priority-${t.priority}">${priorities[t.priority]}</span></div>${urgencyBadge(t)}${taskLinksHTML(t)}</div><div class="row-actions"><button data-task-details="${esc(t.id)}">Detalles</button><button data-edit="${esc(t.id)}" data-kind="task">Editar</button><button data-delete="${esc(t.id)}" data-kind="task" aria-label="Eliminar ${esc(t.name)}">×</button></div></div>`,
         )
         .join("")
     : '<div class="empty">No hay tareas en esta vista.</div>';
@@ -313,7 +315,7 @@ function calendarView() {
         .filter((t) => t.due === date && activeTask(t))
         .map(
           (t) =>
-            `<button class="event ${t.done ? "finished" : ""}" data-edit="${esc(t.id)}" data-kind="task">☑ ${esc(t.name)}</button>`,
+            `<button class="event urgency-item ${t.done ? "finished" : ""}" data-edit="${esc(t.id)}" data-kind="task" ${urgencyAttributes(t)}>☑ ${esc(t.name)}${urgencyBadge(t)}</button>`,
         )
         .join("") +
       state.exams
@@ -331,7 +333,7 @@ function calendarView() {
       "Tus entregas y exámenes, justo donde deben estar.",
       addButtons(),
     ) +
-    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><a class="text-link" href="#practice">Prácticas de FP →</a><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea</span><span><i class="swatch exam"></i>Examen</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span><span><i class="swatch practice"></i>Prácticas de FP</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
+    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><a class="text-link" href="#practice">Prácticas de FP →</a><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea · color según vencimiento</span><span><i class="swatch exam"></i>Examen</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span><span><i class="swatch practice"></i>Prácticas de FP</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
   );
 }
 function subjectsView() {
@@ -399,6 +401,9 @@ function openEditor(kind, id = null, date = today()) {
   form.elements.subject.value = item?.subject || state.subjects[0].name;
   form.elements.date.required = kind === "exam";
   form.elements.date.value = item?.due || item?.date || date;
+  form.elements.dueTime.value = item?.dueTime || "";
+  $("dueTimeField").hidden = kind !== "task";
+  form.elements.dueTime.disabled = kind !== "task";
   form.elements.priority.value = item?.priority || "medium";
   $("priorityField").hidden = kind !== "task";
   prepareTaskExtras(kind, item);
@@ -419,7 +424,11 @@ $("itemForm").onsubmit = (e) => {
   let extra = {};
   if (kind === "task") {
     try {
-      extra = { notes: f.taskNotes.value, links: readTaskLinkDraft() };
+      extra = {
+        notes: f.taskNotes.value,
+        dueTime: f.date.value ? f.dueTime.value : "",
+        links: readTaskLinkDraft(),
+      };
     } catch (error) {
       notify(error.message);
       return;
@@ -749,3 +758,31 @@ document.addEventListener("keydown", (e) => {
 });
 window.addEventListener("hashchange", render);
 render();
+
+function urgencyAttributes(task) {
+  const u = V4.taskUrgency(task);
+  return `data-urgency-task="${esc(task.id)}" data-urgency="${u.level}" style="--urgency:${u.color}"`;
+}
+function urgencyBadge(task) {
+  return `<span class="urgency-badge">${V4.taskUrgency(task).text}</span>`;
+}
+// Refresh only indicators, preserving open forms, filters and calendar navigation.
+function refreshTaskUrgency() {
+  for (const node of document.querySelectorAll("[data-urgency-task]")) {
+    const task = state.tasks.find(
+      (t) => String(t.id) === node.dataset.urgencyTask,
+    );
+    if (!task) continue;
+    const u = V4.taskUrgency(task);
+    node.dataset.urgency = u.level;
+    node.style.setProperty("--urgency", u.color);
+    const badge = node.querySelector(".urgency-badge");
+    if (badge) badge.textContent = u.text;
+  }
+}
+setInterval(refreshTaskUrgency, 1000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshTaskUrgency();
+});
+window.addEventListener("focus", refreshTaskUrgency);
+window.addEventListener("pageshow", refreshTaskUrgency);

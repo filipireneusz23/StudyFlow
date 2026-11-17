@@ -76,7 +76,7 @@ const assert = require("node:assert/strict");
   await navigate("▦ Calendario");
   assert.equal(
     await page.locator('[data-date="2026-11-15"] .event').innerText(),
-    "☑ Entrega antigua",
+    "☑ Entrega antigua\nVence hoy",
   );
   assert.equal(
     await page.locator('[data-date="2026-11-18"] .event').innerText(),
@@ -84,7 +84,7 @@ const assert = require("node:assert/strict");
   );
   assert.equal(
     await page.locator('[data-date="2026-11-20"] .event').innerText(),
-    "☑ Álgebra",
+    "☑ Álgebra\nQuedan 5 días",
   );
   await page.locator('[data-date="2026-11-20"] .event').click();
   await page.locator("#itemForm input[name=date]").fill("2026-12-01");
@@ -96,7 +96,7 @@ const assert = require("node:assert/strict");
   await page.getByRole("button", { name: "Mes siguiente" }).click();
   assert.equal(
     await page.locator('[data-date="2026-12-01"] .event').innerText(),
-    "☑ Álgebra",
+    "☑ Álgebra\nQuedan 16 días",
   );
   await navigate(/Tareas/);
   await page.getByRole("checkbox", { name: "Completar Álgebra" }).click();

@@ -37,7 +37,7 @@ function openTaskDetails(id) {
   dialog.dataset.taskId = id;
   document.getElementById("taskDetailsTitle").textContent = task.name;
   document.getElementById("taskDetailsMeta").textContent =
-    `${task.subject} · ${task.due ? formatDate(task.due) : "Sin fecha"} · ${task.done ? "Completada" : "Pendiente"}`;
+    `${task.subject} · ${task.due ? formatDate(task.due) + (task.dueTime ? " · " + task.dueTime : "") : "Sin fecha"} · ${task.done ? "Completada" : "Pendiente"}`;
   document.getElementById("taskDetailsNotes").textContent =
     task.notes ?? task.description ?? "Sin notas.";
   document.getElementById("taskDetailsLinks").innerHTML =

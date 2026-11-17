@@ -43,3 +43,11 @@ El formulario de creación y edición incluye instrucciones de varias líneas y 
 Se admiten únicamente URL absolutas HTTP y HTTPS. Las notas y nombres nunca se interpretan como HTML. Las tareas antiguas siguen funcionando sin estos campos opcionales (`notes` y `links`, lista de `{label, url}`), sin reescribirlas al cargar. Las copias JSON incluyen los campos y su importación valida los enlaces antes de guardar. El resto de los datos de cada tarea se conserva.
 
 Pruebas adicionales: `node --test tests/task-details.cjs` y `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/task-details-browser.cjs` (Playwright con Chromium). Cubren compatibilidad, persistencia, edición, eliminación, contenido seguro, exportación/importación y pantalla móvil.
+
+### Urgencia de las tareas
+
+Las tareas del panel, de la lista y del calendario muestran un borde, fondo sutil y etiqueta con texto según el vencimiento: más de 7 días verde `#22C55E`; 4–7 lima `#84CC16`; 2–3 amarillo `#EAB308`; mañana naranja `#F97316`; hoy rojo `#EF4444`; atrasadas rojo oscuro `#991B1B`. Las completadas y sin fecha son neutrales. Los colores de las celdas del calendario escolar no cambian.
+
+Los días restantes se calculan con fechas civiles locales, sin dividir milisegundos entre 24 horas. La hora opcional (`dueTime`, `HH:mm`) también es local; al llegar a esa hora la tarea pasa a atrasada. Sin hora, vence al terminar el día. En cambios de horario, una hora repetida utiliza la primera ocurrencia y una hora inexistente avanza por el salto horario, siguiendo la resolución del navegador. El estado se calcula al mostrar las tareas, cada segundo mientras la página está activa y al volver a la pestaña. No se guarda ningún color derivado ni se reescriben las tareas antiguas. Notas y enlaces permanecen intactos y la hora se incluye en las copias JSON.
+
+Pruebas: `node --test tests/task-urgency.cjs` y `NODE_PATH=/tmp/studyflow-tests/node_modules node tests/task-urgency-browser.cjs`. Incluyen todos los niveles, límites de mes/año, año bisiesto, cambios de horario y zonas horarias, medianoche en navegador, hora límite, edición, completar tareas, persistencia, móvil y fondos escolares.

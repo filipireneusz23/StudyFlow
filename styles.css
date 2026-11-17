@@ -1185,3 +1185,35 @@ fieldset .toggle {
 #taskExtras {
   margin: 0;
 }
+
+/* Urgency belongs to the task, never to the academic day cell. */
+.urgency-item {
+  border-left: 4px solid var(--urgency);
+  background: color-mix(in srgb, var(--urgency) 9%, #191e29);
+  color: var(--text);
+}
+.task-row.urgency-item {
+  padding-left: 12px;
+  padding-right: 8px;
+}
+.urgency-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 3px 7px;
+  margin-top: 6px;
+  border: 1px solid var(--urgency);
+  border-radius: 6px;
+  color: #f8fafc;
+  background: #171e29;
+}
+.event .urgency-badge {
+  display: block;
+  font-size: 10px;
+  width: fit-content;
+  max-width: 100%;
+}
+.urgency-item[data-urgency="neutral"],
+.urgency-item[data-urgency="completed"] {
+  background: #191e29;
+  border-left-color: #64748b;
+}
