@@ -364,12 +364,9 @@ function v4Dashboard() {
       orderedTasks()
         .filter((t) => !t.done)
         .slice(0, 5),
-    )}</section><section class="card"><div class="section-head"><h2>Recordatorios importantes</h2><a href="#reminders" class="text-link">Ver todos (${reminders.length}) →</a></div>${reminderRows(reminders.slice(0, 4))}</section></div><div class="stack">${timetableDashboard()}<section class="card"><h2>Próximos exámenes</h2>${examRows(
-      state.exams
-        .filter((e) => e.date >= today())
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(0, 3),
-    )}</section><section class="card practice-card"><h2>Prácticas de FP</h2>${p ? `<p>${esc(p.company || "Periodo configurado")} · ${formatDate(p.start)} – ${formatDate(p.end)}</p><p>${practice.naturalElapsed}/${practice.naturalTotal} días naturales · ${fmt(practice.hours)} horas registradas</p>${practiceTimetableSummary()}` : '<p class="muted">Configura tu periodo de formación en empresa, sin fechas predeterminadas.</p>'}<a class="text-link" href="#practice">Ver prácticas →</a></section></div></div>`
+    )}</section><section class="card"><div class="section-head"><h2>Recordatorios importantes</h2><a href="#reminders" class="text-link">Ver todos (${reminders.length}) →</a></div>${reminderRows(reminders.slice(0, 4))}</section></div><div class="stack">${timetableDashboard()}<section class="card"><h2>Próximos exámenes</h2><div id="dashboardExams">${examRows(
+      Exams.sorted(state.exams, "near", "upcoming").slice(0, 3),
+    )}</div></section><section class="card practice-card"><h2>Prácticas de FP</h2>${p ? `<p>${esc(p.company || "Periodo configurado")} · ${formatDate(p.start)} – ${formatDate(p.end)}</p><p>${practice.naturalElapsed}/${practice.naturalTotal} días naturales · ${fmt(practice.hours)} horas registradas</p>${practiceTimetableSummary()}` : '<p class="muted">Configura tu periodo de formación en empresa, sin fechas predeterminadas.</p>'}<a class="text-link" href="#practice">Ver prácticas →</a></section></div></div>`
   );
 }
 function newTimer(phase, subjectId = "") {

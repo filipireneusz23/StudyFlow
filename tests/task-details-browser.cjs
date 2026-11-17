@@ -54,7 +54,10 @@ const fs = require("node:fs");
       );
     }
     await nav(/Tareas/);
-    await page.getByRole("button", { name: "Detalles", exact: true }).click();
+    await page
+      .locator(".task-row")
+      .getByRole("button", { name: "Detalles", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "Editar tarea", exact: true })
       .click();
@@ -75,7 +78,10 @@ const fs = require("node:fs");
     }
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
     await page.reload();
-    await page.getByRole("button", { name: "Detalles", exact: true }).click();
+    await page
+      .locator(".task-row")
+      .getByRole("button", { name: "Detalles", exact: true })
+      .click();
     assert.equal(await page.locator("#taskDetailsNotes").textContent(), notes);
     assert.equal(await page.locator("#taskDetailsNotes img").count(), 0);
     assert.equal(await page.evaluate(() => window.injected), undefined);
@@ -99,7 +105,9 @@ const fs = require("node:fs");
     await page.locator("[data-link-url]").fill("javascript:alert(1)");
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
     assert.deepEqual(await stored(), savedBeforeInvalid);
-    await page.locator("[data-link-url]").fill("https://example.com/actualizada");
+    await page
+      .locator("[data-link-url]")
+      .fill("https://example.com/actualizada");
     await page.getByRole("button", { name: "Guardar", exact: true }).click();
     let data = await stored();
     assert.equal(data.tasks[0].links.length, 1);
@@ -120,13 +128,11 @@ const fs = require("node:fs");
     );
     assert.deepEqual(exported.tasks, (await stored()).tasks);
     page.once("dialog", (d) => d.accept());
-    await page
-      .locator("#importFile")
-      .setInputFiles({
-        name: "backup.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(exported)),
-      });
+    await page.locator("#importFile").setInputFiles({
+      name: "backup.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(exported)),
+    });
     await page
       .getByRole("status")
       .filter({ hasText: "Copia importada correctamente." })
@@ -136,13 +142,11 @@ const fs = require("node:fs");
     bad.tasks[0].links[0].url = "javascript:alert(1)";
     const before = await stored();
     page.once("dialog", (d) => d.accept());
-    await page
-      .locator("#importFile")
-      .setInputFiles({
-        name: "bad.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(bad)),
-      });
+    await page.locator("#importFile").setInputFiles({
+      name: "bad.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(bad)),
+    });
     await page
       .getByRole("status")
       .filter({ hasText: /No se ha importado/ })
@@ -151,6 +155,7 @@ const fs = require("node:fs");
     await nav(/Tareas/);
     await page.setViewportSize({ width: 390, height: 844 });
     await page
+      .locator(".task-row")
       .getByRole("button", { name: "Detalles", exact: true })
       .first()
       .click();

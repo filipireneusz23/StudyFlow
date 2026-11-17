@@ -78,8 +78,8 @@ const assert = require("node:assert/strict");
     assert.equal(
       await day
         .locator(".exam")
-        .evaluate((e) => getComputedStyle(e).backgroundColor),
-      "rgb(220, 38, 38)",
+        .evaluate((e) => getComputedStyle(e).borderLeftColor),
+      "rgb(239, 68, 68)",
     );
     await day.locator(".day-number").click();
     assert.match(

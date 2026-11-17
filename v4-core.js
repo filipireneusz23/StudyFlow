@@ -404,10 +404,54 @@
         throw Error("Tarea no válida.");
       if (task.due) date(task.due);
     }
+    const pdfIds = new Set();
     for (const exam of state.exams || []) {
       if (typeof exam.name !== "string" || typeof exam.subject !== "string")
         throw Error("Examen no válido.");
-      date(exam.date);
+      if (exam.date) date(exam.date);
+      if (
+        exam.notes !== undefined &&
+        (typeof exam.notes !== "string" || exam.notes.length > 200000)
+      )
+        throw Error(
+          "Las notas del examen deben ser texto de hasta 200000 caracteres.",
+        );
+      taskLinks(exam.links);
+      if (
+        exam.time !== undefined &&
+        exam.time !== "" &&
+        (typeof exam.time !== "string" ||
+          !/^([01]\d|2[0-3]):[0-5]\d$/.test(exam.time))
+      )
+        throw Error("Hora del examen no válida.");
+      if (
+        exam.createdAt !== undefined &&
+        (typeof exam.createdAt !== "string" ||
+          !Number.isFinite(Date.parse(exam.createdAt)))
+      )
+        throw Error("Fecha de creación no válida.");
+      if (
+        exam.pdfs !== undefined &&
+        (!Array.isArray(exam.pdfs) || exam.pdfs.length > 10)
+      )
+        throw Error("Se permiten hasta 10 PDF por examen.");
+      for (const pdf of exam.pdfs || []) {
+        if (
+          !pdf ||
+          typeof pdf.id !== "string" ||
+          !pdf.id ||
+          pdfIds.has(pdf.id) ||
+          typeof pdf.name !== "string" ||
+          pdf.name.length > 255 ||
+          !/\.pdf$/i.test(pdf.name) ||
+          !Number.isInteger(pdf.size) ||
+          pdf.size < 5 ||
+          pdf.size > 20 * 1024 * 1024 ||
+          pdf.type !== "application/pdf"
+        )
+          throw Error("Adjunto PDF no válido o duplicado.");
+        pdfIds.add(pdf.id);
+      }
     }
     if (state.importArchive) {
       const a = state.importArchive;

@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="styles.css" />
     <script src="academic-calendar.js" defer></script>
     <script src="v4-core.js" defer></script>
+    <script src="exam-core.js" defer></script>
+    <script src="exam-files.js" defer></script>
+    <script src="exams-ui.js" defer></script>
     <script src="v4-ui.js" defer></script>
     <script src="timetable.js" defer></script>
     <script src="timetable-ui.js" defer></script>
@@ -24,6 +27,7 @@
       <nav aria-label="Principal">
         <a href="#dashboard" data-view="dashboard">◈ Panel principal</a
         ><a href="#tasks" data-view="tasks">☑ Tareas <b id="navCount">0</b></a
+        ><a href="#exams" data-view="exams">◇ Exámenes</a
         ><a href="#calendar" data-view="calendar">▦ Calendario</a
         ><a href="#timetable" data-view="timetable">◷ Horario</a
         ><a href="#subjects" data-view="subjects">▤ Asignaturas</a
@@ -111,6 +115,23 @@
             con APIs externas.
           </p>
         </fieldset>
+        <fieldset id="examExtras" hidden>
+          <legend>Temarios PDF</legend>
+          <label
+            >Adjuntar PDF<input
+              id="examPdfInput"
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+          /></label>
+          <p class="muted">
+            Hasta 10 PDF por examen, 20 MB por archivo y 100 MB en total. Solo
+            en este navegador: borrar sus datos puede eliminar los PDF. Usa la
+            copia completa con archivos.
+          </p>
+          <div id="examPdfDraft"></div>
+          <p id="examFileMessage" role="status"></p>
+        </fieldset>
         <div class="actions">
           <button type="button" class="secondary" id="cancelDialog">
             Cancelar</button
@@ -138,6 +159,71 @@
       <button id="editTaskDetails" type="button" class="feature-gap">
         Editar tarea
       </button>
+    </dialog>
+    <dialog id="examDetails" aria-labelledby="examDetailsTitle">
+      <div class="section-head">
+        <h2 id="examDetailsTitle"></h2>
+        <button
+          type="button"
+          class="secondary"
+          id="closeExamDetails"
+          aria-label="Cerrar examen"
+        >
+          ×
+        </button>
+      </div>
+      <p id="examDetailsMeta" class="muted"></p>
+      <div id="examDetailsUrgency"></div>
+      <h3 class="feature-gap">Notas / Instrucciones</h3>
+      <div id="examDetailsNotes" class="task-notes-text"></div>
+      <h3 class="feature-gap">Enlaces</h3>
+      <div id="examDetailsLinks"></div>
+      <h3 class="feature-gap">Temarios PDF</h3>
+      <div id="examDetailsPdfs"></div>
+      <p class="muted">
+        PDF guardados solo en este navegador. Borrar sus datos puede
+        eliminarlos.
+      </p>
+      <div class="actions feature-gap">
+        <button type="button" id="editExamDetails" class="secondary">
+          Editar examen</button
+        ><button type="button" id="studyExamDetails">
+          Estudiar con ChatGPT
+        </button>
+      </div>
+      <section id="examStudy" class="feature-gap" hidden>
+        <h3>¿Cómo quieres estudiar?</h3>
+        <div class="actions feature-gap">
+          <button type="button" data-exam-prompt="summary">
+            Resumir temario</button
+          ><button type="button" data-exam-prompt="quiz">
+            Crear preguntas tipo test</button
+          ><button type="button" data-exam-prompt="mock">Simular examen</button
+          ><button type="button" data-exam-prompt="flashcards">
+            Crear flashcards
+          </button>
+        </div>
+        <p class="muted">
+          El prompt se copia y se abre ChatGPT. Descarga el PDF de arriba y
+          adjúntalo manualmente. No se envían archivos automáticamente. Sin API
+          ni claves privadas.
+        </p>
+        <label
+          >Prompt para pegar<textarea
+            id="examPrompt"
+            readonly
+            rows="7"
+          ></textarea>
+        </label>
+        <p id="examPromptMessage" role="status"></p>
+        <a
+          href="https://chatgpt.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-link"
+          >Abrir ChatGPT ↗</a
+        >
+      </section>
     </dialog>
     <dialog id="dayDetails" aria-labelledby="dayTitle">
       <div class="section-head">

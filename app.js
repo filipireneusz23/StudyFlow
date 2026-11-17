@@ -50,9 +50,7 @@ function normalize(raw) {
         !item ||
         typeof item.name !== "string" ||
         typeof item.subject !== "string" ||
-        (date === "due"
-          ? Boolean(item[date]) && !validDate(item[date])
-          : !validDate(item[date]))
+        (Boolean(item[date]) && !validDate(item[date]))
       )
         throw Error("Hay registros con nombre, asignatura o fecha no válidos");
   if (raw.timetable !== undefined) Timetable.validate(raw.timetable);
@@ -179,6 +177,7 @@ const view = () =>
   [
     "dashboard",
     "tasks",
+    "exams",
     "calendar",
     "timetable",
     "subjects",
@@ -195,6 +194,7 @@ const view = () =>
 const titles = {
   dashboard: "Panel principal",
   tasks: "Mis tareas",
+  exams: "Exámenes",
   calendar: "Calendario",
   timetable: "Horario",
   subjects: "Asignaturas",
@@ -251,16 +251,6 @@ function taskFilters() {
     )
     .join("")}</select></label></div>`;
 }
-function examRows(exams) {
-  return exams.length
-    ? exams
-        .map(
-          (e) =>
-            `<div class="exam-row"><div class="date-box">${Number(e.date.slice(8))}<small>${new Intl.DateTimeFormat("es-ES", { month: "short" }).format(new Date(e.date + "T12:00:00"))} ${e.date.slice(0, 4)}</small></div><div class="item-body"><div class="item-title">${esc(e.name)}</div><div class="item-meta">${esc(e.subject)}</div></div><div class="row-actions"><button data-edit="${esc(e.id)}" data-kind="exam">Editar</button><button data-delete="${esc(e.id)}" data-kind="exam" aria-label="Eliminar ${esc(e.name)}">×</button></div></div>`,
-        )
-        .join("")
-    : '<div class="empty">Sin exámenes próximos. Respira y sigue avanzando.</div>';
-}
 function dashboard() {
   return v4Dashboard();
 }
@@ -279,7 +269,7 @@ function tasksView() {
       )
       .join(
         "",
-      )}</div>${taskFilters()}${taskRows(orderedTasks().filter((t) => (filter === "all" || (filter === "done" ? t.done : filter === "overdue" ? overdue(t) : !t.done)) && (subjectFilter === "all" || t.subject === subjectFilter)))}</section><section class="card" style="margin-top:20px"><div class="section-head"><h2>Todos los exámenes</h2></div>${examRows(state.exams.slice().sort((a, b) => a.date.localeCompare(b.date)))}</section>`
+      )}</div>${taskFilters()}${taskRows(orderedTasks().filter((t) => (filter === "all" || (filter === "done" ? t.done : filter === "overdue" ? overdue(t) : !t.done)) && (subjectFilter === "all" || t.subject === subjectFilter)))}</section><section class="card" style="margin-top:20px"><div class="section-head"><h2>Todos los exámenes</h2></div><p><a class="text-link" href="#exams">Filtros y ordenación de exámenes →</a></p>${examRows(Exams.sorted(state.exams))}</section>`
   );
 }
 let showNonTeaching = true;
@@ -322,7 +312,7 @@ function calendarView() {
         .filter((e) => e.date === date)
         .map(
           (e) =>
-            `<button class="event exam" data-edit="${esc(e.id)}" data-kind="exam">◇ ${esc(e.name)}</button>`,
+            `<button class="event exam urgency-item" data-edit="${esc(e.id)}" data-kind="exam" ${examUrgencyAttributes(e)}>◇ ${esc(e.name)}${examUrgencyBadge(e)}</button>`,
         )
         .join("") +
       "</div>";
@@ -333,7 +323,7 @@ function calendarView() {
       "Tus entregas y exámenes, justo donde deben estar.",
       addButtons(),
     ) +
-    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><a class="text-link" href="#practice">Prácticas de FP →</a><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea · color según vencimiento</span><span><i class="swatch exam"></i>Examen</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span><span><i class="swatch practice"></i>Prácticas de FP</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
+    `<section class="card calendar-card"><div class="section-head"><h2>Tu calendario</h2><a class="text-link" href="#practice">Prácticas de FP →</a><div class="calendar-controls"><button class="secondary" data-month="-1" aria-label="Mes anterior">‹</button><strong>${new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" }).format(month)}</strong><button class="secondary" data-month="1" aria-label="Mes siguiente">›</button><button class="secondary" data-action="today">Hoy</button></div></div><div class="calendar-options"><label class="toggle"><input id="showNonTeaching" type="checkbox" ${showNonTeaching ? "checked" : ""}> Mostrar festivos y días no lectivos</label><label>Ir al mes<input id="calendarMonth" type="month" value="${y}-${String(m + 1).padStart(2, "0")}" min="1900-01" max="2100-12"></label></div><p class="muted">${esc(ACADEMIC_CALENDAR.course)} · ${esc(ACADEMIC_CALENDAR.location)} · ${esc(ACADEMIC_CALENDAR.education)}</p><p class="muted">Clases ordinarias: <strong>${formatDate(ACADEMIC_CALENDAR.teachingStart)} – ${formatDate(ACADEMIC_CALENDAR.teachingEnd)}</strong>. <a class="text-link" href="${ACADEMIC_CALENDAR.sources[0]}" target="_blank" rel="noopener noreferrer">Calendario oficial DOE ↗</a></p><p class="calendar-note">No se incluyen Día del Centro ni días sustitutivos sin confirmación. Después del fin de clases puede haber evaluaciones o formación en empresa según el centro. Fuera del curso 2026/2027 solo se señalan fines de semana.</p><div class="calendar-grid">${cells}</div><div class="legend visual-legend"><span><i class="swatch no-class"></i>Festivo / periodo sin clase</span><span><i class="swatch weekend"></i>Fin de semana</span><span><i class="swatch vacation"></i>Vacaciones</span><span><i class="swatch holiday"></i>Festivo / no lectivo</span><span><i class="swatch task"></i>Tarea · color según vencimiento</span><span><i class="swatch exam"></i>Examen · color según fecha</span><span><i class="swatch milestone"></i>Inicio / fin de clases</span><span><i class="swatch practice"></i>Prácticas de FP</span></div><p class="legend">Pulsa cualquier día para ver los motivos y añadir tareas o exámenes. Los eventos personales se pueden editar directamente.</p></section>`
   );
 }
 function subjectsView() {
@@ -345,7 +335,7 @@ function subjectsView() {
 function settingsView() {
   return (
     head("A tu manera", "Tus datos permanecen en este navegador.") +
-    `<div class="settings"><section class="card"><h2>Tu perfil</h2><form id="profileForm"><label>¿Cómo te llamas?<input name="name" maxlength="40" value="${esc(state.settings.name)}"></label><button>Guardar ajustes</button></form></section><section class="card"><h2>Copias de seguridad</h2><p>Los datos no se sincronizan entre dispositivos. Exporta una copia antes de cambiar de navegador, dirección web o borrar almacenamiento.</p><div class="actions"><button data-action="export">Exportar copia JSON</button><button class="secondary" data-action="import">Importar copia</button><button class="secondary" data-action="original">Exportar datos originales</button><button class="secondary" data-action="export-migration">Exportar copia anterior a 4.0</button></div><input id="importFile" type="file" accept="application/json,.json" hidden><p>Incluye tareas, exámenes, asignaturas, horarios, notas, apuntes, estudio y prácticas. Importar reemplaza los apartados incluidos tras confirmación y conserva una copia previa.</p></section>${v4ImportReview()}<section class="card"><h2>StudyFlow 4.0</h2><p>Tu espacio de FP · Sin cuentas ni servicios externos</p></section></div>`
+    `<div class="settings"><section class="card"><h2>Tu perfil</h2><form id="profileForm"><label>¿Cómo te llamas?<input name="name" maxlength="40" value="${esc(state.settings.name)}"></label><button>Guardar ajustes</button></form></section><section class="card"><h2>Copias de seguridad</h2><p>Los datos no se sincronizan entre dispositivos. Exporta una copia antes de cambiar de navegador, dirección web o borrar almacenamiento.</p><div class="actions"><button data-action="export">Exportar copia JSON</button><button class="secondary" data-action="import">Importar copia</button><button data-exam-backup="export">Exportar copia completa con PDF</button><button class="secondary" data-exam-backup="import">Importar copia completa con PDF</button><button class="secondary" data-action="original">Exportar datos originales</button><button class="secondary" data-action="export-migration">Exportar copia anterior a 4.0</button></div><input id="completeImportFile" type="file" accept="application/json,.json" hidden><p class="muted">La copia JSON normal conserva las referencias, pero no incluye los PDF. Para trasladarlos a otro navegador utiliza la copia completa con PDF. No se suben archivos a servidores.</p><input id="importFile" type="file" accept="application/json,.json" hidden><p>Incluye tareas, exámenes, asignaturas, horarios, notas, apuntes, estudio y prácticas. Importar reemplaza los apartados incluidos tras confirmación y conserva una copia previa.</p></section>${v4ImportReview()}<section class="card"><h2>StudyFlow 4.0</h2><p>Tu espacio de FP · Sin cuentas ni servicios externos</p></section></div>`
   );
 }
 function render() {
@@ -364,6 +354,7 @@ function render() {
     {
       dashboard,
       tasks: tasksView,
+      exams: examsView,
       calendar: calendarView,
       timetable: timetableView,
       subjects: subjectsView,
@@ -377,6 +368,10 @@ function render() {
     }[v]();
 }
 function openEditor(kind, id = null, date = today()) {
+  if ($("itemForm").dataset.saving) {
+    notify("Espera a que termine el guardado.");
+    return;
+  }
   if (!state.subjects.length) {
     location.hash = "subjects";
     notify("Añade primero una asignatura.");
@@ -399,69 +394,82 @@ function openEditor(kind, id = null, date = today()) {
     (kind === "task" ? "tarea" : "examen");
   form.elements.name.value = item?.name || "";
   form.elements.subject.value = item?.subject || state.subjects[0].name;
-  form.elements.date.required = kind === "exam";
-  form.elements.date.value = item?.due || item?.date || date;
-  form.elements.dueTime.value = item?.dueTime || "";
-  $("dueTimeField").hidden = kind !== "task";
-  form.elements.dueTime.disabled = kind !== "task";
+  form.elements.date.required = false;
+  form.elements.date.value = item
+    ? kind === "task"
+      ? item.due || ""
+      : item.date || ""
+    : date;
+  form.elements.dueTime.value =
+    (kind === "task" ? item?.dueTime : item?.time) || "";
+  $("dueTimeField").hidden = false;
+  form.elements.dueTime.disabled = false;
   form.elements.priority.value = item?.priority || "medium";
   $("priorityField").hidden = kind !== "task";
   prepareTaskExtras(kind, item);
+  prepareExamExtras(kind, item);
   $("editor").showModal();
 }
-$("itemForm").onsubmit = (e) => {
+$("itemForm").onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target.elements,
-    name = f.name.value.trim();
-  if (
-    !name ||
-    (f.date.value ? !validDate(f.date.value) : editing.kind === "exam")
-  ) {
+    { kind, id } = editing;
+  const fields = {
+    name: f.name.value.trim(),
+    subject: f.subject.value,
+    [kind === "task" ? "due" : "date"]: f.date.value,
+  };
+  if (!fields.name || (f.date.value && !validDate(f.date.value))) {
     notify("Introduce un nombre y una fecha válidos.");
     return;
   }
-  const { kind, id } = editing;
-  let extra = {};
-  if (kind === "task") {
-    try {
-      extra = {
-        notes: f.taskNotes.value,
-        dueTime: f.date.value ? f.dueTime.value : "",
-        links: readTaskLinkDraft(),
-      };
-    } catch (error) {
-      notify(error.message);
-      return;
-    }
+  try {
+    Object.assign(fields, {
+      notes: f.taskNotes.value,
+      links: readTaskLinkDraft(),
+      [kind === "task" ? "dueTime" : "time"]: f.date.value
+        ? f.dueTime.value
+        : "",
+    });
+  } catch (error) {
+    notify(error.message);
+    return;
   }
-  if (
-    mutate((s) => {
-      const list = kind === "task" ? s.tasks : s.exams;
-      const fields = {
-        name,
-        subject: f.subject.value,
-        [kind === "task" ? "due" : "date"]: f.date.value,
-        ...(kind === "task" ? { priority: f.priority.value, ...extra } : {}),
-      };
-      if (id)
-        Object.assign(
-          list.find((t) => String(t.id) === id),
-          fields,
-        );
-      else
-        list.push({
-          id: uid(),
-          ...fields,
-          ...(kind === "task" ? { done: false } : {}),
-        });
-    })
-  ) {
-    $("editor").close();
-    notify("Guardado. Sigue avanzando.");
+  const button = e.target.querySelector('[type="submit"]');
+  if (button.disabled) return;
+  const frozenControls = [
+    ...e.target.querySelectorAll("input,textarea,select,button,fieldset"),
+  ].filter((control) => !control.disabled);
+  for (const control of frozenControls) control.disabled = true;
+  e.target.dataset.saving = "true";
+  try {
+    let saved;
+    if (kind === "exam") saved = await saveExamChanges(fields, id);
+    else
+      saved = mutate((s) => {
+        fields.priority = f.priority.value;
+        const old = s.tasks.find((t) => String(t.id) === id);
+        if (id) Object.assign(old, fields);
+        else s.tasks.push({ id: uid(), ...fields, done: false });
+      });
+    if (saved) {
+      $("editor").close();
+      notify(typeof saved === "string" ? saved : "Guardado. Sigue avanzando.");
+    }
+  } catch (error) {
+    notify(error.message);
+    if (kind === "exam") $("examFileMessage").textContent = error.message;
+  } finally {
+    for (const control of frozenControls) control.disabled = false;
+    delete e.target.dataset.saving;
   }
 };
-$("closeDialog").onclick = $("cancelDialog").onclick = () =>
-  $("editor").close();
+$("closeDialog").onclick = $("cancelDialog").onclick = () => {
+  if (!$("itemForm").dataset.saving) $("editor").close();
+};
+$("editor").addEventListener("cancel", (event) => {
+  if ($("itemForm").dataset.saving) event.preventDefault();
+});
 function download(raw, name) {
   const url = URL.createObjectURL(
     new Blob([raw], { type: "application/json" }),
@@ -509,7 +517,7 @@ $("main").addEventListener("click", (event) => {
   const day = event.target.closest(".day[data-date]");
   if (day) openDay(day.dataset.date);
 });
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   const d = b.dataset;
@@ -517,11 +525,29 @@ document.addEventListener("click", (e) => {
   if (d.action === "new-exam") openEditor("exam");
   if (d.edit) openEditor(d.kind, d.edit);
 
-  if (d.delete && confirm("¿Eliminar este registro?"))
-    mutate((s) => {
-      const key = d.kind === "task" ? "tasks" : "exams";
-      s[key] = s[key].filter((t) => String(t.id) !== d.delete);
-    });
+  if (d.delete && confirm("¿Eliminar este registro?")) {
+    const pdfs =
+      d.kind === "exam"
+        ? state.exams.find((x) => String(x.id) === d.delete)?.pdfs || []
+        : [];
+    if (
+      mutate((s) => {
+        const key = d.kind === "task" ? "tasks" : "exams";
+        s[key] = s[key].filter((t) => String(t.id) !== d.delete);
+      }) &&
+      pdfs.length
+    )
+      try {
+        await ExamFiles.apply(
+          [],
+          pdfs.map((p) => p.id),
+        );
+      } catch (error) {
+        notify(
+          "Examen eliminado; no se pudieron retirar los PDF: " + error.message,
+        );
+      }
+  }
   if (d.filter) {
     filter = d.filter;
     render();
@@ -768,6 +794,7 @@ function urgencyBadge(task) {
 }
 // Refresh only indicators, preserving open forms, filters and calendar navigation.
 function refreshTaskUrgency() {
+  refreshExamUrgency();
   for (const node of document.querySelectorAll("[data-urgency-task]")) {
     const task = state.tasks.find(
       (t) => String(t.id) === node.dataset.urgencyTask,

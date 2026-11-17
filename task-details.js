@@ -7,13 +7,14 @@ function appendTaskLink(link = { label: "", url: "" }) {
 }
 function prepareTaskExtras(kind, item) {
   const box = document.getElementById("taskExtras");
-  box.hidden = kind !== "task";
-  box.disabled = kind !== "task";
+  box.hidden = false;
+  box.disabled = false;
+  box.querySelector("legend").textContent =
+    "Notas y enlaces " + (kind === "task" ? "de la tarea" : "del examen");
   document.getElementById("taskLinkRows").replaceChildren();
   document.getElementById("itemForm").elements.taskNotes.value =
-    kind === "task" ? (item?.notes ?? item?.description ?? "") : "";
-  if (kind === "task")
-    for (const link of V4.taskLinks(item?.links)) appendTaskLink(link);
+    item?.notes ?? item?.description ?? "";
+  for (const link of V4.taskLinks(item?.links)) appendTaskLink(link);
 }
 function readTaskLinkDraft() {
   const links = [

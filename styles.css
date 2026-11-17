@@ -1217,3 +1217,81 @@ fieldset .toggle {
   background: #191e29;
   border-left-color: #64748b;
 }
+.exam-row.urgency-item {
+  padding: 14px 10px;
+  border-left: 4px solid var(--urgency);
+}
+.exam-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.exam-controls label {
+  flex: 1;
+  min-width: 160px;
+}
+.exam-row .row-actions {
+  flex-wrap: wrap;
+  max-width: 250px;
+  justify-content: flex-end;
+}
+.row-actions .study-exam-button {
+  background: #244d42;
+  color: #e0fff3;
+  border: 1px solid #407d69;
+}
+.pdf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+.pdf-row strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.pdf-row small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.pdf-row .actions {
+  flex-wrap: wrap;
+}
+.pdf-row button {
+  font-size: 11px;
+}
+.exam-detail-indicator {
+  padding: 10px;
+  margin-bottom: 12px;
+}
+#examDetailsTitle {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .exam-row {
+    flex-wrap: wrap;
+  }
+  .exam-row .row-actions {
+    max-width: none;
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 0;
+  }
+  .exam-row .item-body {
+    min-width: 0;
+  }
+  .pdf-row .actions {
+    width: 100%;
+  }
+}
+/* Override the original fixed exam-event palette, without touching day cells. */
+.event.exam.urgency-item {
+  border-left: 4px solid var(--urgency);
+  background: color-mix(in srgb, var(--urgency) 9%, #191e29);
+  color: var(--text);
+}

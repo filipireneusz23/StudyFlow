@@ -80,7 +80,7 @@ const assert = require("node:assert/strict");
   );
   assert.equal(
     await page.locator('[data-date="2026-11-18"] .event').innerText(),
-    "◇ Examen antiguo",
+    "◇ Examen antiguo\nQuedan 3 días",
   );
   assert.equal(
     await page.locator('[data-date="2026-11-20"] .event').innerText(),
@@ -147,7 +147,7 @@ const assert = require("node:assert/strict");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   assert.equal(
     await page.locator('[data-date="2026-11-25"] .exam').innerText(),
-    "◇ Examen editado",
+    "◇ Examen editado\nQuedan 10 días",
   );
   await page.getByRole("button", { name: "Abrir menú" }).click();
   await navigate(/Tareas/);

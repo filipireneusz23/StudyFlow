@@ -4,7 +4,8 @@ Aplicación académica en español para FP: diseño oscuro adaptable a móvil, a
 
 ## Funciones
 
-- Dashboard, tareas con prioridades, exámenes y asignaturas personalizadas.
+- Dashboard, tareas con prioridades, notas, enlaces y colores de urgencia; asignaturas personalizadas.
+- Exámenes avanzados con filtros, notas, enlaces, urgencia, temarios PDF locales, copia completa y cuatro prompts para estudiar con ChatGPT.
 - Calendario oficial 2026/2027 de Extremadura para FP Grado Medio y Cabezuela del Valle: fines de semana morados y festivos/vacaciones rojos. [Fuentes y fechas verificadas](docs/calendario-2026-2027.md).
 - Horario semanal, varios perfiles, clases/recreos/horas libres, colores y copia entre días. [Uso del horario](docs/horario.md).
 - Notas por asignatura y evaluación, pesos explícitos, medias provisionales/finales, escala y objetivos.
@@ -29,9 +30,9 @@ La clave personal sigue siendo `studyflow-v1`, con esquema versión 4. La migrac
 
 La antigua integración externa se ha retirado. Sus actividades se conservan en un archivo local dentro de los datos personales. En **Ajustes → Datos importados conservados** puedes convertir, sin duplicados, registros que tengan título útil en tareas locales. Los registros sin metadatos suficientes y las copias originales siguen conservados. La configuración de conexión anterior deja de utilizarse y se elimina. No se hacen consultas al servicio.
 
-**Los datos no se sincronizan entre dispositivos.** Exporta una copia JSON desde Ajustes antes de borrar almacenamiento, cambiar de navegador o dirección web. Las copias incluyen todas las funciones nuevas. Las importaciones validan el archivo y guardan el estado previo en `studyflow-before-import`; los apartados nuevos que no existan en una copia antigua se conservan. Las asignaturas necesarias para los registros conservados también se retienen.
+**Los datos no se sincronizan entre dispositivos.** Exporta una copia JSON desde Ajustes antes de borrar almacenamiento, cambiar de navegador o dirección web. Las copias JSON incluyen notas y enlaces de tareas y exámenes y las referencias a los PDF, pero no sus archivos. Para trasladar los temarios utiliza **Ajustes → Exportar copia completa con PDF** e impórtala con la opción de copia completa. Los PDF solo se guardan en IndexedDB del navegador; borrarlo puede eliminarlos. Las importaciones validan el archivo y guardan el estado previo en `studyflow-before-import`; los apartados nuevos que no existan en una copia antigua se conservan. Las asignaturas necesarias para los registros conservados también se retienen.
 
-Consulta [StudyFlow 4.0: cálculos, prácticas y límites](docs/studyflow-v4.md).
+Consulta [StudyFlow 4.0: cálculos, prácticas y límites](docs/studyflow-v4.md) y [Exámenes avanzados, PDF y ChatGPT](docs/examenes.md).
 
 ## Pruebas
 
@@ -39,13 +40,18 @@ Requiere Node.js, Chromium y Playwright para las pruebas de navegador. Instala h
 
 ```sh
 npm install --prefix /tmp/studyflow-tests --cache /tmp/npm-cache --no-audit --no-fund playwright
-node --test tests/v4-core.cjs tests/timetable.cjs
+node --test tests/v4-core.cjs tests/timetable.cjs tests/task-details.cjs tests/task-urgency.cjs tests/exams.cjs
 node tests/academic-data.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/v4-browser.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/v4-migration.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/smoke.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/academic-calendar.cjs
 NODE_PATH=/tmp/studyflow-tests/node_modules node tests/timetable-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/task-details-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/task-urgency-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/exams-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/exam-storage-browser.cjs
+NODE_PATH=/tmp/studyflow-tests/node_modules node tests/exam-urgency-browser.cjs
 ```
 
 Con el servidor anterior en marcha, los navegadores temporales usan datos de prueba aislados, nunca el perfil del usuario. `CHROMIUM_PATH` permite seleccionar el ejecutable. Las pruebas comprueban migración, cálculos, temporizador, autoguardado, seguridad de texto, prácticas, colores, horario, copias y conservación de datos. No requieren acceso a Google ni credenciales.
